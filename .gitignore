@@ -1,0 +1,23 @@
+### Intellij+iml ###
+.idea/
+out/
+classes/
+
+### Java ###
+*.class
+*.jar
+hs_err_pid*
+
+### Gradle ###
+.gradle
+/build/
+!gradle-wrapper.jar
+
+### Node ###
+logs
+*.log
+npm-debug.log*
+node_modules/
+typings/
+.npm
+

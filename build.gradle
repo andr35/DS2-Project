@@ -1,0 +1,39 @@
+plugins {
+	id 'java'
+	id 'com.github.johnrengelman.shadow' version '1.2.4'
+}
+sourceCompatibility = 1.8
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	compile group: 'com.typesafe.akka', name: 'akka-actor_2.11', version: '2.4.16'
+	compile group: 'com.typesafe.akka', name: 'akka-remote_2.11', version: '2.4.16'
+	compile group: 'com.typesafe.akka', name: 'akka-slf4j_2.11', version: '2.4.16'
+	compile group: 'ch.qos.logback', name: 'logback-classic', version: '1.1.9'
+	compile group: 'commons-validator', name: 'commons-validator', version: '1.4.0'
+	compile group: 'org.apache.commons', name: 'commons-csv', version: '1.4'
+
+	compileOnly group: 'com.intellij', name: 'annotations', version: '12.0'
+
+	testCompile group: 'com.typesafe.akka', name: 'akka-testkit_2.11', version: '2.4.16'
+	testCompile group: 'com.github.stefanbirkner', name: 'system-rules', version: '1.16.0'
+	testCompile group: 'com.google.guava', name: 'guava', version: '19.0'
+}
+
+/**
+ * Compile the code and create a fat JAR archive with all the dependencies
+ * needed to run the project. The entry point here is the it.unitn.ds1.Node class.
+ */
+task node(type: com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+	archiveName = 'node.jar'
+	description = "DS2 project - Node"
+	manifest.attributes 'Main-Class': 'it.unitn.ds1.Node'
+	from(project.convention.getPlugin(JavaPluginConvention).sourceSets.main.output)
+	configurations = [project.configurations.runtime]
+	transform(com.github.jengelman.gradle.plugins.shadow.transformers.AppendingTransformer) {
+		resource = 'reference.conf'
+	}
+}
