@@ -60,8 +60,7 @@ public final class Main {
 	private static boolean validateIPAndPort(String ip, String port) {
 		try {
 			final int portAsInteger = Integer.parseInt(port);
-			return InetAddressValidator.getInstance().isValid(ip) &&
-				portAsInteger >= 1 && portAsInteger <= 65535;
+			return InetAddressValidator.getInstance().isValid(ip) && portAsInteger >= 1 && portAsInteger <= 65535;
 		} catch (NumberFormatException e) {
 			return false;
 		}
@@ -142,8 +141,7 @@ public final class Main {
 
 		// create a NodeActor of type "join" and add it to the system
 		final String id = config.getString(CONFIG_NODE_ID);
-		final String trackerAddress = String.format("akka.tcp://%s@%s:%s/user/%s",
-			SYSTEM_NAME, ip, port, TRACKER_ID);
+		final String trackerAddress = String.format("akka.tcp://%s@%s:%s/user/%s", SYSTEM_NAME, ip, port, TRACKER_ID);
 		system.actorOf(NodeActor.init(trackerAddress), id);
 	}
 
