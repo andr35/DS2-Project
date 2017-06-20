@@ -3,8 +3,8 @@ package it.unitn.ds2.gsfd;
 import akka.actor.ActorSystem;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
-import it.unitn.ds2.gsfd.node.NodeActor;
-import it.unitn.ds2.gsfd.tracker.TrackerActor;
+import it.unitn.ds2.gsfd.actors.NodeActor;
+import it.unitn.ds2.gsfd.actors.TrackerActor;
 import org.apache.commons.validator.routines.InetAddressValidator;
 
 /**
@@ -12,12 +12,19 @@ import org.apache.commons.validator.routines.InetAddressValidator;
  */
 public final class Main {
 
+	// TODO!
+	private static final String TRACKER_ID = "0";
+
+	/**
+	 * Unique name for the Akka application.
+	 * Used by Akka to contact the other Nodes of the system.
+	 */
+	private static final String SYSTEM_NAME = "ds2project";
 
 	/**
 	 * Key used in the configuration file to pass the ID for the Node to launch.
 	 */
 	private static final String CONFIG_NODE_ID = "node.id";
-
 
 	/**
 	 * Error message to print when the Node is invoked with the wrong parameters.
@@ -42,7 +49,6 @@ public final class Main {
 		System.err.println(USAGE);
 		System.exit(2);
 	}
-
 
 	/**
 	 * Validate IP and port.
@@ -118,7 +124,6 @@ public final class Main {
 		}
 	}
 
-
 	/**
 	 * Launch a new Node of the system.
 	 *
@@ -131,13 +136,15 @@ public final class Main {
 		final Config config = ConfigFactory.load();
 
 		// initialize Akka
-		final ActorSystem system = ActorSystem.create(SystemConstants.SYSTEM_NAME, config);
+		final ActorSystem system = ActorSystem.create(SYSTEM_NAME, config);
+
+		// TODO: fix this!
 
 		// create a NodeActor of type "join" and add it to the system
-		final int id = config.getInt(CONFIG_NODE_ID);
+		final String id = config.getString(CONFIG_NODE_ID);
 		final String trackerAddress = String.format("akka.tcp://%s@%s:%s/user/%s",
-			SystemConstants.SYSTEM_NAME, ip, port, SystemConstants.ACTOR_NAME);
-		system.actorOf(NodeActor.init(id, trackerAddress), SystemConstants.ACTOR_NAME);
+			SYSTEM_NAME, ip, port, TRACKER_ID);
+		system.actorOf(NodeActor.init(trackerAddress), id);
 	}
 
 	/**
@@ -149,11 +156,11 @@ public final class Main {
 		final Config config = ConfigFactory.load();
 
 		// initialize Akka
-		final ActorSystem system = ActorSystem.create(SystemConstants.SYSTEM_NAME, config);
+		final ActorSystem system = ActorSystem.create(SYSTEM_NAME, config);
 
 		// create a NodeActor of type "join" and add it to the system
-		final int id = config.getInt(CONFIG_NODE_ID);
-		system.actorOf(TrackerActor.init(id), SystemConstants.ACTOR_NAME);
+		final String id = config.getString(CONFIG_NODE_ID);
+		system.actorOf(TrackerActor.init(), id);
 	}
 
 }

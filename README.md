@@ -31,7 +31,7 @@ You need to provide the following environment variables:
 | -------- | ---------------------------------------- | ------------ |
 | HOST     | The hostname of the machine where Node or Client is executed. |              |
 | PORT     | The port of the Node or the Client.      |              |
-| NODE_ID  | A unique ID for the new node that will join the system. | `Node` only. |
+| ID  | A unique ID for the new node that will join the system. | `Node` only. |
 
 To run the `Node`, run
 ```bash
