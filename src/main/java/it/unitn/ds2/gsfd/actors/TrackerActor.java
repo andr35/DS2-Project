@@ -136,9 +136,9 @@ public final class TrackerActor extends AbstractActor implements MyActor {
 		nodes.forEach(node -> {
 			final String id = idFromRef(node);
 			if (crashesByNode.containsKey(id)) {
-				node.tell(Start.crash(crashesByNode.get(id)), getSelf());
+				node.tell(Start.crash(crashesByNode.get(id), nodes), getSelf());
 			} else {
-				node.tell(Start.normal(), getSelf());
+				node.tell(Start.normal(nodes), getSelf());
 			}
 		});
 
