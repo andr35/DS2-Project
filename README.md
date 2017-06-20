@@ -3,7 +3,7 @@ This is the project of Distributed Systems 2, Fall Semester 2016-17, University 
 
 This project implements a Gossip-style Failure Detection Service. It takes inspiration from the paper ["A Gossip-Style Failure Detection Service"](gossip-style-failure-detection-service.pdf) of Robbert van Renesse (it can be found in [docs](docs/) folder).
 
-Authors: [Andrea Zorzi](https://github.com/Andr35) & [Davide Pedranz](https://github.com/davidepedranz) & [Davide Vecchia](https://github.com/).
+Authors: [Andrea Zorzi](https://github.com/Andr35) & [Davide Pedranz](https://github.com/davidepedranz) & [Davide Vecchia](https://github.com/davide-vecchia).
 
 ## Dependencies
 The software is written in Java and uses the [Akka](http://akka.io/) framework.
