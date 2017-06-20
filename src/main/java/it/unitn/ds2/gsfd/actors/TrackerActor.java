@@ -103,7 +103,7 @@ public final class TrackerActor extends AbstractActor implements MyActor {
 		// load the configuration
 		final int duration = config.getInt("tracker.duration");
 		final int experiments = config.getInt("tracker.experiments");
-		final int repetitions = config.getInt("tracker.experiments");
+		final int repetitions = config.getInt("tracker.repetitions");
 		final int seed = config.getInt("tracker.initial-seed");
 
 		// extract participants' ids
