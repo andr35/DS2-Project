@@ -11,7 +11,7 @@ import java.util.stream.IntStream;
 public final class Experiment {
 
 	// generate a new random experiment
-	public static Experiment generate(Set<String> nodes, long duration, int seed) {
+	public static Experiment generate(Set<String> nodes, int duration, int seed) {
 		final Random random = new Random(seed);
 
 		// number of nodes
@@ -31,7 +31,7 @@ public final class Experiment {
 		final List<ExpectedCrash> expectedCrashes = IntStream.of(crashes)
 			.boxed()
 			.map(permutation::get)
-			.map(node -> new ExpectedCrash(random.nextLong(), node))
+			.map(node -> new ExpectedCrash(random.nextInt(duration), node))
 			.collect(Collectors.toList());
 
 		// return the experiment
@@ -46,7 +46,7 @@ public final class Experiment {
 	private final int numberOfNodes;
 
 	// total duration (milliseconds) of the experiment
-	private final long duration;
+	private final int duration;
 
 	// scheduled crashes
 	private final List<ExpectedCrash> expectedCrashes;
@@ -57,16 +57,21 @@ public final class Experiment {
 	// start time of the experiment
 	private Long start;
 
+	// status of the experiment
+	private Long stop;
+
 	// initialize a new experiment
-	public Experiment(String id, int numberOfNodes, long duration, List<ExpectedCrash> expectedCrashes) {
+	public Experiment(String id, int numberOfNodes, int duration, List<ExpectedCrash> expectedCrashes) {
 		this.id = id;
 		this.numberOfNodes = numberOfNodes;
 		this.duration = duration;
 		this.expectedCrashes = expectedCrashes;
 		this.reportedCrashed = new LinkedList<>();
+		this.start = null;
+		this.stop = null;
 	}
 
-	public long getDuration() {
+	public int getDuration() {
 		return duration;
 	}
 
@@ -75,10 +80,17 @@ public final class Experiment {
 	}
 
 	public void start() {
-		if (start == null) {
+		if (start != null) {
 			throw new IllegalStateException("Please call the start() method only once per experiment.");
 		}
 		start = System.currentTimeMillis();
+	}
+
+	public void stop() {
+		if (stop != null) {
+			throw new IllegalStateException("Please call the stop() method only once per experiment.");
+		}
+		stop = System.currentTimeMillis();
 	}
 
 	// report a new crash
@@ -91,6 +103,9 @@ public final class Experiment {
 	}
 
 	public void generateReport() {
+		if(stop == null) {
+			throw new IllegalStateException("Please call the stop() method to stop the experiment first.");
+		}
 		// TODO: write the experiment configuration and report to the disk
 	}
 }

@@ -101,7 +101,7 @@ public final class TrackerActor extends AbstractActor implements MyActor {
 	private void onReady() {
 
 		// load the configuration
-		final long duration = config.getLong("tracker.duration");
+		final int duration = config.getInt("tracker.duration");
 		final int experiments = config.getInt("tracker.experiments");
 		final int repetitions = config.getInt("tracker.experiments");
 		final int seed = config.getInt("tracker.initial-seed");
@@ -132,6 +132,7 @@ public final class TrackerActor extends AbstractActor implements MyActor {
 			.collect(Collectors.toMap(ExpectedCrash::getNode, ExpectedCrash::getDelta));
 
 		// start the experiment
+		current.start();
 		nodes.forEach(node -> {
 			final String id = idFromRef(node);
 			if (crashesByNode.containsKey(id)) {
@@ -158,6 +159,7 @@ public final class TrackerActor extends AbstractActor implements MyActor {
 		nodes.forEach(node -> node.tell(new Stop(), getSelf()));
 
 		// generate the report
+		experiments.get(index).stop();
 		experiments.get(index).generateReport();
 
 		// check if this was the last experiment... in this case shutdown the system
