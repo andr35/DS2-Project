@@ -35,7 +35,7 @@ dependencies {
 task node(type: com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
 	archiveName = 'ds2.jar'
 	description = "DS2 project - A Gossip Style Failure Detection Service"
-	manifest.attributes 'Main-Class': 'it.unitn.ds2.Main'
+	manifest.attributes 'Main-Class': 'it.unitn.ds2.gsfd.Main'
 	from(project.convention.getPlugin(JavaPluginConvention).sourceSets.main.output)
 	configurations = [project.configurations.runtime]
 	//noinspection UnnecessaryQualifiedReference
