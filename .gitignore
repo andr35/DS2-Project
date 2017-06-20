@@ -1,5 +1,6 @@
 ### Intellij+iml ###
-.idea/
+.idea/*
+!.idea/runConfigurations/
 out/
 classes/
 
