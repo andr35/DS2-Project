@@ -130,15 +130,20 @@ public final class TrackerActor extends AbstractActor implements MyActor {
 		final List<ExpectedCrash> expectedCrashes = current.getExpectedCrashes();
 		final Map<String, Long> crashesByNode = expectedCrashes.stream()
 			.collect(Collectors.toMap(ExpectedCrash::getNode, ExpectedCrash::getDelta));
+		final long gossipTime = current.getGossipTime();
+		final long failTime = current.getFailTime();
+		final double mParam = current.getMulticastParam();
+		// TODO: multicastParam should be based on the number of nodes
+		final int mMaxWait = current.getMulticastMaxWait();
 
 		// start the experiment
 		current.start();
 		nodes.forEach(node -> {
 			final String id = idFromRef(node);
 			if (crashesByNode.containsKey(id)) {
-				node.tell(Start.crash(crashesByNode.get(id), nodes), getSelf());
+				node.tell(Start.crash(crashesByNode.get(id), nodes, gossipTime, failTime, mParam, mMaxWait), getSelf());
 			} else {
-				node.tell(Start.normal(nodes), getSelf());
+				node.tell(Start.normal(nodes, gossipTime, failTime, mParam, mMaxWait), getSelf());
 			}
 		});
 

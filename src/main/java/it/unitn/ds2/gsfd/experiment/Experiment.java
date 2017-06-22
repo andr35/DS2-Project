@@ -36,7 +36,9 @@ public final class Experiment {
 
 		// return the experiment
 		final String id = String.format("nodes-%d__duration-%d__seed-%d", numberOfNodes, duration, seed);
-		return new Experiment(id, numberOfNodes, duration, expectedCrashes);
+		return new Experiment(id, numberOfNodes, duration, expectedCrashes,
+			1000, 2500, 3, 20);
+		// TODO: proper input of gossipTime, failTime, multicastParam and multicastMaxWait
 	}
 
 	// unique identifier for the experiment
@@ -54,6 +56,18 @@ public final class Experiment {
 	// reported crashed
 	private final List<ReportedCrash> reportedCrashed;
 
+	// frequency of Gossip
+	private final long gossipTime;
+
+	// time to consider a node failed
+	private final long failTime;
+
+	// parameter "a" of probability of multicast (catastrophe recovery)
+	private final double multicastParam;
+
+	// maximum number of times a multicast can be postponed
+	private final int multicastMaxWait;
+
 	// start time of the experiment
 	private Long start;
 
@@ -61,12 +75,17 @@ public final class Experiment {
 	private Long stop;
 
 	// initialize a new experiment
-	public Experiment(String id, int numberOfNodes, int duration, List<ExpectedCrash> expectedCrashes) {
+	public Experiment(String id, int numberOfNodes, int duration, List<ExpectedCrash> expectedCrashes,
+					  long gossipTime, long failTime, double multicastParam, int multicastMaxWait) {
 		this.id = id;
 		this.numberOfNodes = numberOfNodes;
 		this.duration = duration;
 		this.expectedCrashes = expectedCrashes;
 		this.reportedCrashed = new LinkedList<>();
+		this.gossipTime = gossipTime;
+		this.failTime = failTime;
+		this.multicastParam = multicastParam;
+		this.multicastMaxWait = multicastMaxWait;
 		this.start = null;
 		this.stop = null;
 	}
@@ -78,6 +97,20 @@ public final class Experiment {
 	public List<ExpectedCrash> getExpectedCrashes() {
 		return expectedCrashes;
 	}
+
+	public long getGossipTime() {
+		return gossipTime;
+	}
+
+	public long getFailTime() {
+		return failTime;
+	}
+
+	public double getMulticastParam() {
+		return multicastParam;
+	}
+
+	public int getMulticastMaxWait() { return multicastMaxWait; }
 
 	public void start() {
 		if (start != null) {
