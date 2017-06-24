@@ -1,9 +1,6 @@
 package it.unitn.ds2.gsfd.utils;
 
 import akka.actor.Cancellable;
-import scala.concurrent.duration.Duration;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * Class to manage the beat count and timeout for a node
@@ -12,17 +9,20 @@ public class NodeInfo {
 	private long beatCount;
 	private Cancellable failTimeout;
 	private int failId;
+	private int quiescence;
 
 	public NodeInfo() {
 		beatCount = 0;
 		failId = 0;
 		failTimeout = null;
+		quiescence = 0;
 	}
 
 	public NodeInfo(Cancellable timeout) {
 		beatCount = 0;
 		failId = 0;
 		failTimeout = timeout;
+		quiescence = 0;
 	}
 
 	public long getBeatCount() {
@@ -31,11 +31,23 @@ public class NodeInfo {
 
 	public void setBeatCount(long beatCount) {
 		this.beatCount = beatCount;
+		quiescence = 0;
+	}
+
+	public void quiescent() {
+		quiescence++;
+	}
+
+	public int getQuiescence() {
+		return quiescence;
+	}
+
+	public void resetQuiescence() {
+		quiescence = 0;
 	}
 
 	public void heartbeat() {
-		if (beatCount == Integer.MAX_VALUE) beatCount = 0;
-		else beatCount++;
+		beatCount++;
 	}
 
 	public void resetTimeout(Cancellable timeout) {
@@ -47,13 +59,5 @@ public class NodeInfo {
 
 	public int getFailId() {
 		return failId;
-	}
-
-	public void cancelTimeout() {
-		failTimeout.cancel();
-	}
-
-	public boolean isValid(int beatCount) {
-		return this.beatCount < beatCount;
 	}
 }

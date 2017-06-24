@@ -7,7 +7,6 @@ import akka.actor.Props;
 import akka.event.DiagnosticLoggingAdapter;
 import akka.event.Logging;
 import akka.japi.Creator;
-import akka.japi.pf.ReceiveBuilder;
 import it.unitn.ds2.gsfd.messages.Registration;
 import it.unitn.ds2.gsfd.messages.ReportCrash;
 import it.unitn.ds2.gsfd.messages.Start;
@@ -20,7 +19,7 @@ import scala.concurrent.duration.Duration;
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-
+import java.util.stream.Collectors;
 
 
 /**
@@ -65,9 +64,6 @@ public final class NodeActor extends AbstractActor implements MyActor {
 	// extends HashMap<ActorRef, NodeInfo>
 	private NodeMap nodes;
 
-	// array to select random ActorRef; contains only nodes considered correct
-	private List<ActorRef> correctNodes;
-
 	// timeout to issue another Gossip
 	private long gossipTime;
 	private Cancellable gossipTimeout;
@@ -83,6 +79,9 @@ public final class NodeActor extends AbstractActor implements MyActor {
 
 	// timeout to issue another try for multicast
 	private Cancellable multicastTimeout;
+
+	// if true, the node replies to the gossip sender
+	private boolean pullByGossip = true;
 
 	// log, used for debug proposes
 	private final DiagnosticLoggingAdapter log;
@@ -115,6 +114,7 @@ public final class NodeActor extends AbstractActor implements MyActor {
 			.match(SelfCrash.class, msg -> onCrash())
 			.match(GossipReminder.class, msg -> sendGossip())
 			.match(Gossip.class, this::onGossip) // TODO: sliding window
+			.match(GossipReply.class, this::onGossipReply)
 			.match(Fail.class, this::onFail)
 			.match(Cleanup.class, this::onCleanup)
 			.match(CatastropheReminder.class, msg -> sendMulticast())
@@ -164,19 +164,14 @@ public final class NodeActor extends AbstractActor implements MyActor {
 		failTime = msg.getFailTime();
 		cleanupTime = 2*failTime;
 		// set the structures for nodes, and start timeouts
-		correctNodes = new ArrayList<>(msg.getNodes());
-		nodes = new NodeMap();
-		correctNodes.forEach(ref -> {
+		nodes = new NodeMap(msg.getNodes(), getSelf());
+		msg.getNodes().forEach(ref -> {
 			if (ref != getSelf()) {
 				// schedule to self to catch failure of the node
 				Cancellable failTimeout = sendToSelf(new Fail(ref, 0), failTime); // TODO: increase initial failTime?
 				nodes.put(ref, new NodeInfo(failTimeout));
 			}
-			else {
-				nodes.put(ref, new NodeInfo());
-			}
 		});
-		correctNodes.remove(getSelf());
 		// schedule reminder to perform first Gossip
 		gossipTimeout = sendToSelf(new GossipReminder(), gossipTime);
 		// setup for catastrophe recovery
@@ -196,44 +191,48 @@ public final class NodeActor extends AbstractActor implements MyActor {
 		if (selfCrashTimeout != null) selfCrashTimeout.cancel();
 		if (gossipTimeout != null) gossipTimeout.cancel();
 		if (multicastTimeout != null) multicastTimeout.cancel();
-		correctNodes.clear();
 		nodes.clear();
+		log.info("onStop complete");
 	}
 
-	private void onCrash() { // TODO: equivalent to onStop()?
+	private void onCrash() {
 		getContext().become(notReady);
 		log.info("onCrash complete");
 	}
 
 	private void sendGossip() {
-		if (correctNodes.size() < 1) {
-			log.warning("Gossip aborted, no correct node available");
-			return;
-		}
 		// increment node's own heartbeat counter
 		nodes.get(getSelf()).heartbeat();
-		// pick random node
-		Random rand = new Random();
-		ActorRef gossipNode = correctNodes.get(rand.nextInt(correctNodes.size()));
-		// gossip the beats to the random node
-		gossipNode.tell(new Gossip(nodes.getBeats()), getSelf());
-		log.debug("gossiped to {}: " + nodes.beatsToString(), idFromRef(gossipNode));
-		// schedule a new reminder to Gossip
-		gossipTimeout = sendToSelf(new GossipReminder(), gossipTime);
+		// pick random correct node
+		if (!nodes.getCorrectNodes().isEmpty()) {
+			ActorRef gossipNode = nodes.pickNode();
+			// gossip the beats to the random node
+			gossipNode.tell(new Gossip(nodes.getBeats()), getSelf());
+			// lower the probability of gossiping the same node soon
+			nodes.get(gossipNode).resetQuiescence();
+			log.debug("gossiped to {}: " + nodes.beatsToString(), idFromRef(gossipNode));
+			// schedule a new reminder to Gossip
+			gossipTimeout = sendToSelf(new GossipReminder(), gossipTime);
+		}
+		else
+			log.info("Gossip stopped (no correct node to gossip)");
 	}
 
 	private void onGossip(Gossip msg) {
-		Map<ActorRef, Long> gossipedBeats = msg.getBeats();
-		correctNodes.forEach(ref -> {
-			long gossipedBeatCount = gossipedBeats.get(ref);
-			// if a higher heartbeat counter was gossiped, update it
-			if (gossipedBeatCount > nodes.get(ref).getBeatCount()) { // TODO: sliding window
-				nodes.get(ref).setBeatCount(gossipedBeatCount);
-				// restart the timeout
-				Fail failMsg = new Fail(ref, nodes.get(ref).getFailId()+1);
-				nodes.get(ref).resetTimeout(sendToSelf(failMsg, failTime));
-			}
-		});
+		updateBeats(msg.getBeats());
+		log.debug("gossiped by {}", idFromRef(getSender()));
+		if (pullByGossip){
+			// gossip back (pull strategy)
+			reply(new GossipReply(nodes.getBeats()));
+			// lower the probability of gossiping the same node soon
+			nodes.get(getSender()).resetQuiescence();
+			log.debug("gossiped (reply) to {}: " + nodes.beatsToString(), idFromRef(getSender()));
+		}
+	}
+
+	private void onGossipReply(GossipReply msg) {
+		updateBeats(msg.getBeats());
+		log.debug("gossiped (reply) by {}", idFromRef(getSender()));
 	}
 
 	private void onFail(Fail msg) {
@@ -242,7 +241,7 @@ public final class NodeActor extends AbstractActor implements MyActor {
 		// check if the Fail message was still valid
 		if (nodes.get(failing).getFailId() == failId) {
 			// remove from correct nodes and report to Tracker
-			correctNodes.remove(failing);
+			nodes.setFailed(failing);
 			sendToTracker(new ReportCrash(failing));
 			log.info("Node {} reported as failed", idFromRef(failing));
 		}
@@ -266,6 +265,9 @@ public final class NodeActor extends AbstractActor implements MyActor {
 			nodes.get(getSelf()).heartbeat();
 			multicastWait = 0; // TODO: check
 			multicast(new CatastropheMulticast(nodes.getBeats()));
+			// even the probability of gossip to any node
+			nodes.getCorrectNodes().forEach(ref -> nodes.get(ref).resetQuiescence());
+			log.debug("multicast: " + nodes.beatsToString());
 		}
 		else {
 			// multicast postponed
@@ -276,8 +278,28 @@ public final class NodeActor extends AbstractActor implements MyActor {
 
 	private void onMulticast(CatastropheMulticast msg) {
 		multicastWait = 0;
-		Gossip gossipMsg = new Gossip(msg.getBeats());
-		onGossip(gossipMsg);
+		updateBeats(msg.getBeats());
+		// lower the probability of gossiping the multicast sender soon
+		nodes.get(getSender()).resetQuiescence();
+	}
+
+	private void updateBeats(Map<ActorRef, Long> gossipedBeats) {
+		nodes.getCorrectNodes().forEach(ref -> {
+			long gossipedBeatCount = gossipedBeats.get(ref);
+			// if a higher heartbeat counter was gossiped, update it
+			if (gossipedBeatCount > nodes.get(ref).getBeatCount()) { // TODO: sliding window
+				nodes.get(ref).setBeatCount(gossipedBeatCount);
+				// lower the probability of gossiping the same node soon
+				nodes.get(ref).resetQuiescence();
+				// restart the timeout
+				Fail failMsg = new Fail(ref, nodes.get(ref).getFailId()+1);
+				nodes.get(ref).resetTimeout(sendToSelf(failMsg, failTime));
+			}
+			else {
+				// no heartbeat update (will increase probability of gossip)
+				nodes.get(ref).quiescent();
+			}
+		});
 	}
 
 	/**
@@ -322,6 +344,6 @@ public final class NodeActor extends AbstractActor implements MyActor {
 	 * @param message Message to send in multicast.
 	 */
 	private void multicast(Serializable message) {
-		correctNodes.forEach(ref -> ref.tell(message, getSelf()));
+		nodes.getCorrectNodes().forEach(ref -> ref.tell(message, getSelf()));
 	}
 }
