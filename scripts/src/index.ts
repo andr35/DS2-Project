@@ -1,3 +1,3 @@
-import {Script} from "./Prompt";
+import {Script} from "./script";
 
 new Script().run();
