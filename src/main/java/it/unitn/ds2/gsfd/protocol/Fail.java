@@ -5,9 +5,9 @@ import akka.actor.ActorRef;
 import java.io.Serializable;
 
 /**
- * Message a node sends to self to detect a failed node
+ * Message a node sends to self to detect a failed node.
  */
-public class Fail implements Serializable {
+public final class Fail implements Serializable {
 	private final ActorRef failing;
 	private final int failId;
 

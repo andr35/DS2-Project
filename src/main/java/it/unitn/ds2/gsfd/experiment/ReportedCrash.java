@@ -1,11 +1,11 @@
 package it.unitn.ds2.gsfd.experiment;
 
-class ReportedCrash {
+final class ReportedCrash {
 	private final long delta;
 	private final String node;
 	private final String reporter;
 
-	public ReportedCrash(long delta, String node, String reporter) {
+	ReportedCrash(long delta, String node, String reporter) {
 		this.delta = delta;
 		this.node = node;
 		this.reporter = reporter;

@@ -5,9 +5,9 @@ import akka.actor.ActorRef;
 import java.io.Serializable;
 
 /**
- * Message a node sends to self to permanently remove a node
+ * Message a node sends to self to permanently remove a node.
  */
-public class Cleanup implements Serializable {
+public final class Cleanup implements Serializable {
 	private final ActorRef failed;
 
 	public Cleanup(ActorRef failed) {

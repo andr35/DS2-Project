@@ -1,24 +1,21 @@
 package it.unitn.ds2.gsfd.utils;
 
 import akka.actor.ActorRef;
-import akka.actor.Cancellable;
-import it.unitn.ds2.gsfd.protocol.Fail;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Class to manage the HashMap of all nodes
+ * Class to manage the HashMap of all nodes.
  */
-public class NodeMap extends HashMap<ActorRef, NodeInfo>{
+public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 
 	private ActorRef primary;
 	// nodes considered correct
 	private List<ActorRef> correctNodes;
 
-
 	public NodeMap(List<ActorRef> nodes, ActorRef primary) {
-		super();
 		this.primary = primary;
 		correctNodes = new ArrayList<>(nodes);
 		correctNodes.remove(this.primary);
@@ -47,22 +44,23 @@ public class NodeMap extends HashMap<ActorRef, NodeInfo>{
 	}
 
 	public String beatsToString() {
-		String result = "{";
+		final StringBuilder result = new StringBuilder("{");
 		for (Map.Entry<ActorRef, NodeInfo> entry : entrySet()) {
 			ActorRef ref = entry.getKey();
 			NodeInfo info = entry.getValue();
-			result += " (" + ref.path().name() + ", " + info.getBeatCount() + ") ";
+			result.append(" (").append(ref.path().name()).append(", ").append(info.getBeatCount()).append(") ");
 		}
-		return result + "}";
+		return result.toString() + "}";
 	}
 
+	@Nullable
 	public ActorRef pickNode() {
 
-		if(correctNodes.isEmpty()) return null;
+		if (correctNodes.isEmpty()) return null;
 
 		// order nodes by their quiescence value
 		Map<ActorRef, NodeInfo> sorted = entrySet().stream()
-			.sorted((e1, e2) -> e2.getValue().getQuiescence()-e1.getValue().getQuiescence())
+			.sorted((e1, e2) -> e2.getValue().getQuiescence() - e1.getValue().getQuiescence())
 			.collect(Collectors.toMap(Entry::getKey, Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 		sorted.keySet().retainAll(correctNodes);
 
@@ -81,19 +79,12 @@ public class NodeMap extends HashMap<ActorRef, NodeInfo>{
 		// subtract function in terms of i to the total until negative value is reached
 		// the corresponding iteration is the random number chosen
 		int k = 0;
-		randomDouble = randomDouble - sorted.size()-k;
+		randomDouble = randomDouble - sorted.size() - k;
 		while (randomDouble >= 0) {
 			k++;
-			randomDouble = randomDouble - sorted.size()-k;
+			randomDouble = randomDouble - sorted.size() - k;
 		}
-
-		/*System.out.print("ORDER: ");
-		sorted.forEach((ref, info) -> {
-			System.out.print(ref.path().name()+"("+info.getQuiescence()+")");
-		});
-		System.out.print("\n");*/
 
 		return candidates.get(k);
 	}
-
 }

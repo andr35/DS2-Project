@@ -12,7 +12,9 @@ import org.apache.commons.validator.routines.InetAddressValidator;
  */
 public final class Main {
 
-	// TODO!
+	/**
+	 * For some totally arbitrary decision, the tracker has ALWAYS ID 0.
+	 */
 	private static final String TRACKER_ID = "0";
 
 	/**
@@ -136,8 +138,6 @@ public final class Main {
 
 		// initialize Akka
 		final ActorSystem system = ActorSystem.create(SYSTEM_NAME, config);
-
-		// TODO: fix this!
 
 		// create a NodeActor of type "join" and add it to the system
 		final String id = config.getString(CONFIG_NODE_ID);

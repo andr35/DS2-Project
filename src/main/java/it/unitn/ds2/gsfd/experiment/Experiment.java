@@ -11,11 +11,15 @@ import java.util.stream.IntStream;
 public final class Experiment {
 
 	// generate a new random experiment
-	public static Experiment generate(Set<String> nodes, int duration, int seed) {
+	public static Experiment generate(Set<String> nodes, boolean pullByGossip, int duration, int seed, int repetition) {
 		final Random random = new Random(seed);
 
 		// number of nodes
 		final int numberOfNodes = nodes.size();
+
+		// pick a random number of nodes to crash [0, n)
+		// NB: we crash at most all except one node
+		final int crashes = random.nextInt(numberOfNodes);
 
 		// generate a permutation of nodes
 		// the first n will be selected for the crashes
@@ -23,21 +27,18 @@ public final class Experiment {
 		Collections.sort(permutation);
 		Collections.shuffle(permutation, random);
 
-		// pick a random number of nodes to crash [0, n)
-		// NB: we crash at most all except one node
-		final int crashes = random.nextInt(numberOfNodes);
-
 		// generate the crashes
 		final List<ExpectedCrash> expectedCrashes = IntStream.of(crashes)
 			.boxed()
 			.map(permutation::get)
-			.map(node -> new ExpectedCrash(random.nextInt(duration), node))
+			.map(node -> new ExpectedCrash((long) random.nextInt(duration), node))
 			.collect(Collectors.toList());
 
 		// return the experiment
-		final String id = String.format("nodes-%d__duration-%d__seed-%d", numberOfNodes, duration, seed);
-		return new Experiment(id, numberOfNodes, duration, expectedCrashes,
-			1000, 2500, 3, 20);
+		final String id = String.format("nodes-%d__pushpull-%b__duration-%d__seed-%d__repetition-%d",
+			numberOfNodes, pullByGossip, duration, seed, repetition);
+		return new Experiment(id, numberOfNodes, pullByGossip, duration, expectedCrashes,
+			250, 3000, 3, 20);
 		// TODO: proper input of gossipTime, failTime, multicastParam and multicastMaxWait
 	}
 
@@ -46,6 +47,9 @@ public final class Experiment {
 
 	// number of nodes that participates to the experiment
 	private final int numberOfNodes;
+
+	// gossip strategy to use: pull vs push-pull
+	private final boolean pullByGossip;
 
 	// total duration (milliseconds) of the experiment
 	private final int duration;
@@ -75,10 +79,11 @@ public final class Experiment {
 	private Long stop;
 
 	// initialize a new experiment
-	public Experiment(String id, int numberOfNodes, int duration, List<ExpectedCrash> expectedCrashes,
+	public Experiment(String id, int numberOfNodes, boolean pullByGossip, int duration, List<ExpectedCrash> expectedCrashes,
 					  long gossipTime, long failTime, double multicastParam, int multicastMaxWait) {
 		this.id = id;
 		this.numberOfNodes = numberOfNodes;
+		this.pullByGossip = pullByGossip;
 		this.duration = duration;
 		this.expectedCrashes = expectedCrashes;
 		this.reportedCrashed = new LinkedList<>();
@@ -88,6 +93,10 @@ public final class Experiment {
 		this.multicastMaxWait = multicastMaxWait;
 		this.start = null;
 		this.stop = null;
+	}
+
+	public boolean isPullByGossip() {
+		return pullByGossip;
 	}
 
 	public int getDuration() {
@@ -110,7 +119,9 @@ public final class Experiment {
 		return multicastParam;
 	}
 
-	public int getMulticastMaxWait() { return multicastMaxWait; }
+	public int getMulticastMaxWait() {
+		return multicastMaxWait;
+	}
 
 	public void start() {
 		if (start != null) {
@@ -136,9 +147,19 @@ public final class Experiment {
 	}
 
 	public void generateReport() {
-		if(stop == null) {
+		if (stop == null) {
 			throw new IllegalStateException("Please call the stop() method to stop the experiment first.");
 		}
 		// TODO: write the experiment configuration and report to the disk
+	}
+
+	@Override
+	public String toString() {
+		return "Experiment{" +
+			"numberOfNodes=" + numberOfNodes +
+			", pullByGossip=" + pullByGossip +
+			", duration=" + duration +
+			", expectedCrashes=" + expectedCrashes.size() +
+			'}';
 	}
 }

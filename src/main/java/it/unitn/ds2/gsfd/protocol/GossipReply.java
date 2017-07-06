@@ -6,7 +6,7 @@ import java.io.Serializable;
 import java.util.Map;
 
 /**
- * Message to gossip the node's current view
+ * Message to gossip the node's current view.
  */
 public final class GossipReply implements Serializable {
 	private final Map<ActorRef, Long> beats;

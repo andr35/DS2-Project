@@ -3,15 +3,15 @@ package it.unitn.ds2.gsfd.utils;
 import akka.actor.Cancellable;
 
 /**
- * Class to manage the beat count and timeout for a node
+ * Class to manage the beat count and timeout for a node.
  */
-public class NodeInfo {
+public final class NodeInfo {
 	private long beatCount;
 	private Cancellable failTimeout;
 	private int failId;
 	private int quiescence;
 
-	public NodeInfo() {
+	NodeInfo() {
 		beatCount = 0;
 		failId = 0;
 		failTimeout = null;

@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
  * Tracker: this actor is responsible to track the other nodes,
  * bootstrap the experiments, collect the results and generate reports.
  */
-public final class TrackerActor extends AbstractActor implements MyActor {
+public final class TrackerActor extends AbstractActor implements BaseActor {
 
 	// initialize the Tracker node
 	public static Props init() {
@@ -102,7 +102,7 @@ public final class TrackerActor extends AbstractActor implements MyActor {
 
 		// load the configuration
 		final int duration = config.getInt("tracker.duration");
-		final int experiments = config.getInt("tracker.experiments");
+		final int numberOfExperiments = config.getInt("tracker.number-of-experiments");
 		final int repetitions = config.getInt("tracker.repetitions");
 		final int seed = config.getInt("tracker.initial-seed");
 
@@ -110,12 +110,14 @@ public final class TrackerActor extends AbstractActor implements MyActor {
 		final Set<String> ids = nodes.stream().map(this::idFromRef).collect(Collectors.toSet());
 
 		// generate the experiments
-		this.experiments = new ArrayList<>(experiments * repetitions);
-		for (int i = 0; i < experiments; i++) {
-			final Experiment current = Experiment.generate(ids, duration, i + seed);
-			this.experiments.add(current);
-
-			// TODO: repetitions
+		this.experiments = new ArrayList<>(numberOfExperiments * repetitions);
+		for (int i = 0; i < repetitions; i++) {
+			for (int j = 0; j < numberOfExperiments; j++) {
+				final Experiment experimentPushOnly = Experiment.generate(ids, false, duration, j + seed, i);
+				this.experiments.add(experimentPushOnly);
+				final Experiment experimentPushPull = Experiment.generate(ids, true, duration, j + seed, i);
+				this.experiments.add(experimentPushPull);
+			}
 		}
 
 		// start the experiments
@@ -123,7 +125,6 @@ public final class TrackerActor extends AbstractActor implements MyActor {
 	}
 
 	private void onExperimentStart(int index) {
-		log.info("Start experiment {} of {}", index + 1, experiments.size());
 
 		// extract the experiment
 		current = experiments.get(index);
@@ -133,17 +134,20 @@ public final class TrackerActor extends AbstractActor implements MyActor {
 		final long gossipTime = current.getGossipTime();
 		final long failTime = current.getFailTime();
 		final double mParam = current.getMulticastParam();
+
 		// TODO: multicastParam should be based on the number of nodes
 		final int mMaxWait = current.getMulticastMaxWait();
+
+		log.info("Start experiment {} of {} [{}]", index + 1, experiments.size(), current.toString());
 
 		// start the experiment
 		current.start();
 		nodes.forEach(node -> {
 			final String id = idFromRef(node);
 			if (crashesByNode.containsKey(id)) {
-				node.tell(Start.crash(crashesByNode.get(id), nodes, gossipTime, failTime, mParam, mMaxWait), getSelf());
+				node.tell(Start.crash(current.isPullByGossip(), crashesByNode.get(id), nodes, gossipTime, failTime, mParam, mMaxWait), getSelf());
 			} else {
-				node.tell(Start.normal(nodes, gossipTime, failTime, mParam, mMaxWait), getSelf());
+				node.tell(Start.normal(current.isPullByGossip(), nodes, gossipTime, failTime, mParam, mMaxWait), getSelf());
 			}
 		});
 
@@ -210,6 +214,7 @@ public final class TrackerActor extends AbstractActor implements MyActor {
 	}
 
 	private void onReportCrash(ReportCrash msg) {
+		log.warning("Report crash of node {} (from node {})", idFromRef(msg.getNode()), idFromRef(getSender()));
 
 		// TODO: put in the start and stop the experiment number???
 		current.addCrash(idFromRef(msg.getNode()), idFromRef(getSender()));

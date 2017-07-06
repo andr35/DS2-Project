@@ -1,10 +1,10 @@
 package it.unitn.ds2.gsfd.experiment;
 
-public class ExpectedCrash {
+public final class ExpectedCrash {
 	private final long delta;
 	private final String node;
 
-	public ExpectedCrash(long delta, String node) {
+	ExpectedCrash(long delta, String node) {
 		this.delta = delta;
 		this.node = node;
 	}
