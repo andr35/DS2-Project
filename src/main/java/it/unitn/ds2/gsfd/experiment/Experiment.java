@@ -31,14 +31,15 @@ public final class Experiment {
 		final List<ExpectedCrash> expectedCrashes = IntStream.of(crashes)
 			.boxed()
 			.map(permutation::get)
-			.map(node -> new ExpectedCrash((long) random.nextInt(duration), node))
+			.map(node -> new ExpectedCrash((long) random.nextInt(duration/2), node))  // TODO: remove /2
+			// TODO: crash within duration - failTime?
 			.collect(Collectors.toList());
 
 		// return the experiment
 		final String id = String.format("nodes-%d__pushpull-%b__duration-%d__seed-%d__repetition-%d",
 			numberOfNodes, pullByGossip, duration, seed, repetition);
 		return new Experiment(id, numberOfNodes, pullByGossip, duration, expectedCrashes,
-			250, 3000, 3, 20);
+			1000, 10000, 3, 10);
 		// TODO: proper input of gossipTime, failTime, multicastParam and multicastMaxWait
 	}
 

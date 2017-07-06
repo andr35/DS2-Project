@@ -9,12 +9,18 @@ import java.io.Serializable;
  */
 public final class Cleanup implements Serializable {
 	private final ActorRef failed;
+	private final long cleanId;
 
-	public Cleanup(ActorRef failed) {
+	public Cleanup(ActorRef failed, long cleanId) {
 		this.failed = failed;
+		this.cleanId = cleanId;
 	}
 
 	public ActorRef getFailed() {
 		return failed;
+	}
+
+	public long getCleanId() {
+		return cleanId;
 	}
 }

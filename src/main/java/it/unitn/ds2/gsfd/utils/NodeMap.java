@@ -26,7 +26,18 @@ public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 	public void clear() {
 		primary = null;
 		correctNodes.clear();
+		forEach((ref, info) -> info.cancelTimeout());
 		super.clear();
+	}
+
+	@Nullable
+	@Override
+	public NodeInfo remove(Object ref) {
+		ActorRef r = (ActorRef) ref;
+		if (!correctNodes.contains(r)) {
+			return super.remove(r);
+		}
+		return null;
 	}
 
 	public void setFailed(ActorRef ref) {
@@ -34,7 +45,7 @@ public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 	}
 
 	public List<ActorRef> getCorrectNodes() {
-		return correctNodes;
+		return Collections.unmodifiableList(correctNodes);
 	}
 
 	public Map<ActorRef, Long> getBeats() {

@@ -151,7 +151,6 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	}
 
 	private void onStart(Start msg) {
-		log.warning("onStart start");
 
 		getContext().become(ready);
 
@@ -217,19 +216,19 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 		// TODO: check that this works with the experiments
 		// pick random correct node
-		if (!nodes.getCorrectNodes().isEmpty()) {
+		ActorRef gossipNode = nodes.pickNode();
+		if (gossipNode != null) {
 
-			ActorRef gossipNode = nodes.pickNode();
-			if (gossipNode != null) {
-				// gossip the beats to the random node
-				gossipNode.tell(new Gossip(nodes.getBeats()), getSelf());
-				// lower the probability of gossiping the same node soon
-				nodes.get(gossipNode).resetQuiescence();
-				log.debug("gossiped to {}: " + nodes.beatsToString(), idFromRef(gossipNode));
-			}
+			// gossip the beats to the random node
+			gossipNode.tell(new Gossip(nodes.getBeats()), getSelf());
+			log.debug("gossiped to {}: " + nodes.beatsToString(), idFromRef(gossipNode));
+
+			// lower the probability of gossiping the same node soon
+			nodes.get(gossipNode).resetQuiescence();
 
 			// schedule a new reminder to Gossip
 			gossipTimeout = sendToSelf(new GossipReminder(), gossipTime);
+
 		} else {
 			log.info("Gossip stopped (no correct node to gossip)");
 		}
@@ -238,7 +237,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	private void onGossip(Gossip msg) {
 		log.debug("gossiped by {}, beats={}, push_pull={}", idFromRef(getSender()), nodes.beatsToString(), pullByGossip);
 
-		// this method update both the beats for all nodes and resets the quiescence for the sender
+		// this method update both the beats for all nodes and resets the quiescence for any updated
 		updateBeats(msg.getBeats());
 
 		if (pullByGossip) {
@@ -261,22 +260,36 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	 */
 	private void onFail(Fail msg) {
 		ActorRef failing = msg.getFailing();
-		int failId = msg.getFailId();
+		long failId = msg.getFailId();
+
 		// check if the Fail message was still valid
-		if (nodes.get(failing).getFailId() == failId) {
+		if (nodes.get(failing).getTimeoutId() == failId) {
 			// remove from correct nodes and report to Tracker
 			nodes.setFailed(failing);
 			sendToTracker(new ReportCrash(failing));
 			log.info("Node {} reported as failed", idFromRef(failing));
+		} else {
+			log.warning("Dropped Fail message (expected Id: {}, found: {}) -> {}",
+				nodes.get(failing).getTimeoutId(), failId, msg.toString());
 		}
-		// schedule message to remove the node from the heartbeat structure
-		sendToSelf(new Cleanup(failing), cleanupTime);
+
+		// schedule message to remove the node from the heartbeat map
+		Cleanup cleanMsg = new Cleanup(failing, nodes.get(failing).getTimeoutId() + 1);
+		nodes.get(failing).resetTimeout(sendToSelf(cleanMsg, cleanupTime));
 	}
 
 	private void onCleanup(Cleanup msg) {
 		ActorRef failed = msg.getFailed();
-		nodes.remove(failed);
-		log.info("Node {} cleanup", idFromRef(failed));
+		long cleanId = msg.getCleanId();
+
+		// check if the Cleanup message was still valid
+		if (nodes.get(failed).getTimeoutId() == cleanId) {
+			nodes.remove(failed);
+			log.info("Node {} cleanup", idFromRef(failed));
+		} else {
+			log.warning("Dropped Cleanup message (expected Id: {}, found: {}) -> {}",
+			nodes.get(failed).getTimeoutId(), cleanId, msg.toString());
+		}
 	}
 
 	private void sendMulticast() {
@@ -321,7 +334,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 				// lower the probability of gossiping the same node soon
 				nodes.get(ref).resetQuiescence();
 				// restart the timeout
-				Fail failMsg = new Fail(ref, nodes.get(ref).getFailId() + 1);
+				Fail failMsg = new Fail(ref, nodes.get(ref).getTimeoutId() + 1);
 				nodes.get(ref).resetTimeout(sendToSelf(failMsg, failTime));
 			} else {
 				// no heartbeat update (will increase probability of gossip)

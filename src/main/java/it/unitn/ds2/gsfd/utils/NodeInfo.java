@@ -7,21 +7,21 @@ import akka.actor.Cancellable;
  */
 public final class NodeInfo {
 	private long beatCount;
-	private Cancellable failTimeout;
-	private int failId;
+	private Cancellable timeout;
+	private long timeoutId;
 	private int quiescence;
 
 	NodeInfo() {
 		beatCount = 0;
-		failId = 0;
-		failTimeout = null;
+		timeoutId = 0;
+		timeout = null;
 		quiescence = 0;
 	}
 
 	public NodeInfo(Cancellable timeout) {
 		beatCount = 0;
-		failId = 0;
-		failTimeout = timeout;
+		timeoutId = 0;
+		this.timeout = timeout;
 		quiescence = 0;
 	}
 
@@ -50,14 +50,18 @@ public final class NodeInfo {
 		beatCount++;
 	}
 
-	public void resetTimeout(Cancellable timeout) {
-		if (failTimeout == null) return;
-		failTimeout.cancel();
-		failId++;
-		failTimeout = timeout;
+	public void cancelTimeout() {
+		if (timeout != null) timeout.cancel();
 	}
 
-	public int getFailId() {
-		return failId;
+	public void resetTimeout(Cancellable timeout) {
+		if (timeout == null || this.timeout == null) return;
+		this.timeout.cancel();
+		timeoutId++;
+		this.timeout = timeout;
+	}
+
+	public long getTimeoutId() {
+		return timeoutId;
 	}
 }

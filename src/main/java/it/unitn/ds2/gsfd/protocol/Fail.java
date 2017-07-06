@@ -9,9 +9,9 @@ import java.io.Serializable;
  */
 public final class Fail implements Serializable {
 	private final ActorRef failing;
-	private final int failId;
+	private final long failId;
 
-	public Fail(ActorRef failing, int failId) {
+	public Fail(ActorRef failing, long failId) {
 		this.failing = failing;
 		this.failId = failId;
 	}
@@ -20,7 +20,7 @@ public final class Fail implements Serializable {
 		return failing;
 	}
 
-	public int getFailId() {
+	public long getFailId() {
 		return failId;
 	}
 }
