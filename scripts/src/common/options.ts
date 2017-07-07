@@ -8,5 +8,6 @@ export interface Options {
 
   keys?: string;
   sshKey?: string;
+  sshPassphrase?: string;
   downloadDir?: string;
 }

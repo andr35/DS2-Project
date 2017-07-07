@@ -16,7 +16,8 @@ export class Script {
     program
       .version('1.0.0')
       .option('-k --keys <n>', 'Keys json file')
-      .option('-s --ssh-key <n>', 'Ssh key to access to remote machine');
+      .option('-s --ssh-key <n>', 'Ssh key to access to remote machine')
+      .option('-p --ssh-passphrase <n>', 'Ssh key password');
 
     program
       .command('start <location>')

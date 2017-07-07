@@ -3,6 +3,7 @@ import *  as chalk from "chalk";
 
 
 export const ProjectUtils = {
+  EC2_LOG_PATH: '/home/ubuntu/log.out',
   PROJECT_PATH: __dirname + '/../../../',
   BUILD_PATH: __dirname + '/../../../build/libs',
   JAR_NAME: 'ds2.jar',

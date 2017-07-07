@@ -9,23 +9,34 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as chalk from 'chalk';
 import * as scp2 from 'scp2';
+import * as ssh2 from 'ssh2';
+
+interface EC2Machine {
+  id: number;
+  instanceId: string;
+  region: string;
+  tracker?: boolean
+  ip?: string;
+}
+
+// TODO check if it is possible to remove most of " new asw.EC2()"
 
 export class AwsCloud implements Cloud {
 
   private images: { [region: string]: string } = { // TODO check if matching is correct
-    'ap-south-1': 'ami-e94e5e8a', // Sidney?
+    'ap-south-1': 'ami-49e59a26', // Mumbai
     'eu-west-2': 'ami-cc7066a8', // London
     'eu-west-1': 'ami-6d48500b', // Ireland
-    'ap-northeast-2': 'ami-785c491f', // Tokyo?
-    'ap-northeast-1': 'ami-94d20dfa', // Seoul?
+    'ap-northeast-2': 'ami-94d20dfa', // Seoul?
+    'ap-northeast-1': 'ami-785c491f', // Tokyo
     'sa-east-1': 'ami-34afc458', // Sao Paulo
     'ca-central-1': 'ami-b3d965d7', // Canada
-    'ap-southeast-1': 'ami-2378f540', // Singapore?
-    'ap-southeast-2': 'ami-49e59a26', // Mumbai?
+    'ap-southeast-1': 'ami-2378f540', // Singapore
+    'ap-southeast-2': 'ami-e94e5e8a', // Sidney
     'eu-central-1': 'ami-1c45e273', // Frankfurt
     'us-east-1': 'ami-d15a75c7', // North Virginia
     'us-east-2': 'ami-8b92b4ee', // Ohio
-    'us-west-1': 'ami-73f7da13', // North California // maybe switch with 'us-west-2'
+    'us-west-1': 'ami-73f7da13', // North California
     'us-west-2': 'ami-835b4efa' // Oregon
   };
 
@@ -36,8 +47,12 @@ export class AwsCloud implements Cloud {
     MaxCount: 1
   };
 
+  private trackerIp: string;
+
   private regions = [];
-  private nodes: { id: number; instanceId: string; ip: string }[] = [];
+  private nodes: EC2Machine[] = [];
+  private deployedNodes: EC2Machine[] = [];
+  private jarPath = '';
 
   constructor(private options: Options) {
     // Load access key and secret key
@@ -55,6 +70,7 @@ export class AwsCloud implements Cloud {
     try {
       // Build project
       const jarDir = await this.buildProject();
+      this.jarPath = jarDir + '/' + ProjectUtils.JAR_NAME;
 
       // Set region
       this.changeRegion(this.getRandomRegion());
@@ -63,25 +79,31 @@ export class AwsCloud implements Cloud {
 
       // Create tracker
       const trackerInstance = await this.createInstance(ec2, 0, true);
-      // TODO issue: must wait until state is running + some seconds
-      await this.copyProject(trackerInstance, jarDir + '/' + ProjectUtils.JAR_NAME);
-      await this.startProjectInInstance(trackerInstance);
-      this.nodes.push({id: 0, instanceId: trackerInstance.InstanceId, ip: trackerInstance.PublicIpAddress});
+      this.nodes.push({
+        id: 0,
+        instanceId: trackerInstance.InstanceId,
+        tracker: true,
+        region: this.getCurrentRegion()
+      });
 
       // Create nodes
       for (let i = 1; i <= this.options.nodes; i++) {
         // Set region  and create EC2
         this.changeRegion(this.getRandomRegion());
-        ec2 = new aws.EC2();
+        ec2 = new aws.EC2(); // TODO
 
         const nodeInstance = await this.createInstance(ec2, 0, true);
-        // TODO issue: must wait until state is running + some seconds
-        await this.copyProject(nodeInstance, jarDir + '/' + ProjectUtils.JAR_NAME);
-        await this.startProjectInInstance(nodeInstance);
-        this.nodes.push({id: i, instanceId: nodeInstance.InstanceId, ip: nodeInstance.PublicIpAddress});
+        this.nodes.push({
+          id: i,
+          instanceId: nodeInstance.InstanceId,
+          region: this.getCurrentRegion()
+        });
       }
 
-      console.log(chalk.bold.green('> Experiment started successfully. Nodes:'), this.nodes);
+      // Deploy project on machines and start it
+      await this.deployProjectWhenEC2IsRunning();
+
+      console.log(chalk.bold.green('> Experiment started successfully. Nodes:'), this.deployedNodes);
     } catch (e) {
       console.log(chalk.bold.red('> An error occurred while starting experiment'), e);
     }
@@ -101,7 +123,7 @@ export class AwsCloud implements Cloud {
             if (err) {
               console.error(chalk.bold.red(`> Fail to terminate EC2 instances in region "${region}"`), err);
             } else {
-              data.TerminatingInstances.forEach(termInst => console.log(chalk.green(`EC2 instance "${termInst.InstanceId}" terminated.`)));
+              data.TerminatingInstances.forEach(termInst => console.log(chalk.green(`> EC2 instance "${termInst.InstanceId}" (region "${region}")  terminated`)));
             }
           });
         } else {
@@ -174,7 +196,7 @@ export class AwsCloud implements Cloud {
       ec2.runInstances({
         ...this.defaultInstanceRequest,
         ImageId: imageId,
-        KeyName: 'awsds2'
+        KeyName: 'ds2'
       }, (err, data) => {
         if (err) {
           return reject(err);
@@ -232,25 +254,142 @@ export class AwsCloud implements Cloud {
   }
 
   private copyProject(instance: Instance, jarPath: string): Promise<void> {
-    console.log(chalk.blue(`> Copy project in instance "${instance.InstanceId}"`));
+    console.log(chalk.blue(`> Copy project in instance "${instance.InstanceId}" (ip: ${instance.PublicIpAddress})`));
     return new Promise((resolve, reject) => {
       scp2.scp(jarPath, {
         host: instance.PublicIpAddress,
         username: 'ubuntu',
         privateKey: fs.readFileSync(path.resolve(this.options.sshKey)),
+        passphrase: this.options.sshPassphrase ? this.options.sshPassphrase : undefined,
         path: '/home/ubuntu/'
       }, err => err ? reject(err) : resolve());
     });
   }
 
-  private startProjectInInstance(instance: Instance): Promise<void> {
-
+  private startProjectInInstance(instance: Instance, node: EC2Machine): Promise<void> {
     return new Promise((resolve, reject) => {
-      // TODO start project
-      // execute jar with options, redirect outputs to file
-      resolve();
+      // Execute jar with options, redirect outputs to file
+      const conn = new ssh2.Client();
+      conn.on('ready', () => {
+        console.log(chalk.green(`> SSH connection with "${node.instanceId}" (${node.region}) established. Start project...`));
+        const cmd = this.getStartProjectCmd(node.id, this.options, node.tracker);
+        conn.exec(cmd, (err, stream) => {
+          if (err) {
+            return reject(err);
+          }
+          stream.on('close', code => {
+            const chalkColor = code === 0 ? chalk.green : chalk.red;
+            console.log(chalkColor(`> SSH connection with "${node.instanceId}" (${node.region}) closed with code ${code}`));
+            conn.end();
+            if (code === 0) {
+              if (node.tracker) { // When tracker is running, "publish" its ip address
+                this.trackerIp = instance.PublicIpAddress;
+              }
+              resolve();
+            } else {
+              reject('Fail to run node');
+            }
+          }).on('data', data => {
+            console.log(chalk.blue(`> ${node.instanceId} STDOUT: ${data}`));
+          }).stderr.on('data', data => {
+            console.log(chalk.red(`> ${node.instanceId} STDERR: ${data}`));
+          });
+        });
+      }).connect({
+        host: instance.PublicIpAddress,
+        port: 22,
+        username: 'ubuntu',
+        privateKey: fs.readFileSync(path.resolve(this.options.sshKey)),
+        passphrase: this.options.sshPassphrase ? this.options.sshPassphrase : undefined
+      });
     });
   }
+
+  private deployProjectWhenEC2IsRunning(): Promise<null> {
+    return new Promise((resolve, reject) => {
+      this.setDeployTimeout(30000, resolve, reject);
+    });
+  }
+
+  private async setDeployTimeout(timeout: number, resolve, reject) {
+    timeout = timeout > 10000 ? timeout : 10000;
+    console.log(chalk.yellow(`> Wait ${timeout / 1000} sec before deploy`));
+    setTimeout(async () => {
+
+      const promises = [];
+      for (let node of this.nodes) {
+        const running = await this.isMachineRunning(node);
+        if (running) {
+          const instance = await this.getInstance(node);
+          const prom = this.copyProject(instance, this.jarPath)
+            .then(() => {
+              if (!node.tracker && !this.trackerIp) { // must wait for tracker bootstrap
+                throw new Error('Tracker not yet bootstrapped');
+              } else {
+                return this.startProjectInInstance(instance, node)
+                  .then(() => {
+                    this.nodes = this.nodes.filter(n => n.instanceId != node.instanceId); // Remove node from list
+                    this.deployedNodes.push(node);
+                    console.log(chalk.bold.green(`> Instance "${node.instanceId}", in "${node.region}" deploy completed`));
+                    return node.instanceId;
+                  });
+              }
+            })
+            .catch(err => {
+              console.log(chalk.red(`> Fail to deploy project on instance "${node.instanceId}" region "${node.region}". Retry at next timeout. Cause: `, err));
+            });
+          promises.push(prom);
+        }
+      }
+
+      Promise.all(promises)
+        .then(() => {
+          if (this.nodes.length === 0) {
+            resolve();
+          } else {
+            // Try again
+            this.setDeployTimeout(timeout - 10000, resolve, reject);
+          }
+        })
+        .catch(() => {
+          // Try again
+          this.setDeployTimeout(timeout - 10000, resolve, reject);
+        });
+    }, timeout);
+  }
+
+  private isMachineRunning(node: EC2Machine): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      this.changeRegion(node.region);
+      const ec2 = new aws.EC2();
+      ec2.describeInstanceStatus({InstanceIds: [node.instanceId]}, (err, data) => {
+        if (err) {
+          return reject(err);
+        }
+        return resolve(data.InstanceStatuses[0].InstanceState.Name === 'running');
+      });
+    });
+  }
+
+  private getInstance(node: EC2Machine): Promise<Instance> {
+    return new Promise((resolve, reject) => {
+      this.changeRegion(node.region);
+      const ec2 = new aws.EC2();
+      ec2.describeInstances({InstanceIds: [node.instanceId]}, (err, data) => {
+        if (err) {
+          return reject(err);
+        } else {
+          for (let r = 0; r < data.Reservations.length; r++) {
+            const reservation = data.Reservations[r];
+            if (reservation.Instances.length > 0) {
+              return resolve(reservation.Instances[0]);
+            }
+          }
+        }
+      });
+    });
+  }
+
 
   //noinspection JSMethodCanBeStatic
   private async buildProject() {
@@ -267,11 +406,25 @@ export class AwsCloud implements Cloud {
     return ck;
   }
 
-  private getRandomRegion(): string {
-    return 'us-east-1'; // TODO edit
-    // return this.regions[Math.floor(Math.random() * this.regions.length)];
+  private getStartProjectCmd(id: number, options: Options, tracker?: boolean): string {
+    if (tracker) {
+      return (options.nodes ? `NODES=${options.nodes} ` : ``) +
+        (options.duration ? `DURATION=${options.duration} ` : ``) +
+        (options.experiments ? `EXPERIMENTS=${options.experiments} ` : ``) +
+        (options.repetitions ? `REPETITIONS=${options.repetitions} ` : ``) +
+        (options.initialSeed ? `INITIAL_SEED=${options.initialSeed} ` : ``) +
+        (options.reportPath ? `REPORT_PATH=${options.reportPath} ` : ``) +
+        `java -jar ${ProjectUtils.JAR_NAME} tracker > ${ProjectUtils.EC2_LOG_PATH}`;
+    } else {
+      return `ID=${id} PORT=${10000 + id} java -jar ${ProjectUtils.JAR_NAME} node ${this.trackerIp} 10000 > ${ProjectUtils.EC2_LOG_PATH}`;
+    }
   }
 
+  private getRandomRegion(): string {
+    return this.regions[Math.floor(Math.random() * this.regions.length)];
+  }
+
+  //noinspection JSMethodCanBeStatic
   private getCurrentRegion(): string {
     return aws.config.region;
   }
