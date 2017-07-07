@@ -59,34 +59,39 @@ public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 
 		if (correctNodes.isEmpty()) return null;
 
-		// order nodes by their quiescence value
-		Map<ActorRef, NodeInfo> sorted = entrySet().stream()
-			.sorted((e1, e2) -> e2.getValue().getQuiescence() - e1.getValue().getQuiescence())
-			.collect(Collectors.toMap(Entry::getKey, Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
-		sorted.keySet().retainAll(correctNodes);
+		List<ActorRef> candidates = new ArrayList<>(keySet());
+		candidates.retainAll(correctNodes);
 
-		List<ActorRef> candidates = new ArrayList<>(sorted.keySet());
-		// generate a random number whose value ranges from 0.0 to the sum of the values of a function
-		// function: "sorted.get(candidates.get(i)).getQuiescence()"
-		// other examples: "sorted.size()-i" (only based on ranking), "1" (totally random)
+		// compute in advance a score for each node (will alter probability of it being chosen).
+		// function: "sorted.get(candidates.get(i)).getQuiescence() + 1"
+		// the +1 guarantees every node has a chance to be chosen
+		// other examples: "sorted.size() - i + 1" (only based on ranking), "1" (uniform random)
 		// TODO: more complex function (possibly by experiment setting)
+		List<Long> nodeScores = new ArrayList<>();
+		for (int i = 0; i < candidates.size(); i++) {
+			nodeScores.add(i, get(candidates.get(i)).getQuiescence() + 1);
+		}
+
+		// generate a random number whose value ranges from 0.0 to the sum
+		// of the values of the function specified above
 		double randomMultiplier = 0;
-		for (int i = 0; i < sorted.size(); i++) {
-			randomMultiplier += 1;
-			//sorted.get(candidates.get(i)).getQuiescence();
+		for (int i = 0; i < candidates.size(); i++) {
+			randomMultiplier += nodeScores.get(i);
 		}
 		Random r = new Random();
 		double randomDouble = r.nextDouble() * randomMultiplier;
 
 		// subtract function in terms of i to the total until negative value is reached
 		// the corresponding iteration is the random number chosen
-		int k = 0;
-		randomDouble = randomDouble - sorted.size() - k;
-		while (randomDouble >= 0) {
-			k++;
-			randomDouble = randomDouble - sorted.size() - k;
+		int k;
+		for (k = 0; k < candidates.size(); k++) {
+			randomDouble -= nodeScores.get(k);
+			if (randomDouble <= 0) {
+				return candidates.get(k);
+			}
 		}
 
 		return candidates.get(k);
 	}
+
 }

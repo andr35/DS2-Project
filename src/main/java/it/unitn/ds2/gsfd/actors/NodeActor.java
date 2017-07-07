@@ -12,7 +12,6 @@ import it.unitn.ds2.gsfd.messages.ReportCrash;
 import it.unitn.ds2.gsfd.messages.Start;
 import it.unitn.ds2.gsfd.messages.Stop;
 import it.unitn.ds2.gsfd.protocol.*;
-import it.unitn.ds2.gsfd.utils.NodeInfo;
 import it.unitn.ds2.gsfd.utils.NodeMap;
 import scala.concurrent.duration.Duration;
 
