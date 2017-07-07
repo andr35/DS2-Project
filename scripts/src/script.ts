@@ -1,8 +1,9 @@
 import * as inquirer from 'inquirer';
 import * as chalk from 'chalk';
 import * as program from 'commander';
-import {LocalStart} from "./local-start";
-import {AwsStart} from "./aws-start";
+import {Options} from "./common/options";
+import {LocalMachine} from "./cloud/local-machine";
+import {AwsCloud} from "./cloud/aws-cloud";
 
 export class Script {
 
@@ -14,34 +15,38 @@ export class Script {
 
     program
       .version('1.0.0')
-      .option('-n --nodes <n>', 'Number of nodes to use in the experiment', parseNumericOption)
-      .option('-d --duration <n>', 'Duration of an experiment (in seconds)', parseNumericOption)
-      .option('-e --experiments <n>', 'Number of experiments', parseNumericOption)
-      .option('-k --repetitions <n>', 'Repeat experiment n times', parseNumericOption)
-      .option('-s --initial-seed <n>', 'Initial seed', parseNumericOption)
-      .option('-r --report-path <n>', 'Report path for the tracker');
-
-    program
-      .command('spawn')
-      .description('Spawn machines on cloud')
-      .action(options => this.spawn(options.parent));
+      .option('-k --keys <n>', 'Keys json file')
+      .option('-s --ssh-key <n>', 'Ssh key to access to remote machine');
 
     program
       .command('start <location>')
       .description('Start an experiment (in local / aws)')
-      .action((extraArg: string, options: any) => this.start(extraArg, options.parent));
+      .option('-n --nodes <n>', 'Number of nodes to use in the experiment', parseNumericOption)
+      .option('-d --duration <n>', 'Duration of an experiment (in seconds)', parseNumericOption)
+      .option('-e --experiments <n>', 'Number of experiments', parseNumericOption)
+      .option('-z --repetitions <n>', 'Repeat experiment n times', parseNumericOption)
+      .option('-i --initial-seed <n>', 'Initial seed', parseNumericOption)
+      .option('-r --report-path <n>', 'Report path for the tracker')
+      .action((extraArg: string, options: any) => this.start(extraArg, {...options, ...options.parent}));
 
     program
-      .command('shutdown')
+      .command('shutdown <location>')
       .description('Shutdown machines on cloud')
-      .action(options => this.shutdown());
+      .action((extraArg: string, options: any) => this.shutdown(extraArg, {...options, ...options.parent}));
 
     program
-      .command('report')
+      .command('report <location>')
       .description('Download reports from a tracker')
-      .action(options => this.report());
+      .option('-d --download-dir <n>', 'Directory where put downloaded reports')
+      .action((extraArg: string, options: any) => this.report(extraArg, {...options, ...options.parent}));
+
+    program
+      .command('watch <location>')
+      .description('Download reports from a tracker')
+      .action((extraArg: string, options: any) => this.watch(extraArg, {...options, ...options.parent}));
   }
 
+  //noinspection JSMethodCanBeStatic
   public run() {
     program.parse(process.argv);
 
@@ -50,49 +55,92 @@ export class Script {
     }
   }
 
-  // /////////////////////////
+  // /////////////////////////////////////////////////
   //  Commands
-  // /////////////////////////
+  // /////////////////////////////////////////////////
 
-  private spawn(options: any) {
-    this.completeTrackerOptions(options).then(options => {
-      console.info(chalk.bold.blue('> Spawn cloud machines...'));
-      // TODO
-    }).catch(err => Script.printErrorAndExit(err));
-  }
+  private start(location: string, options: Options) {
 
-  private start(extraArg: string, options: any) {
     this.completeTrackerOptions(options).then(options => {
-      switch (extraArg) {
+      switch (location) {
         case 'local':
           console.info(chalk.bold.blue('> Start machines in local environment...'));
-          new LocalStart(options).run();
+          new LocalMachine(options).startExperiment();
           break;
         case 'aws':
+          // Check for options
+          Script.checkCloudKeysPassed(options);
+          Script.checkSshKeysPassed(options);
           console.info(chalk.bold.blue('> Start cloud machines...'));
-          new AwsStart(options).run();
+          new AwsCloud(options).startExperiment();
           break;
         default:
-          Script.printErrorAndExit('Not a valid location for start system.');
+          Script.printWrongLocationEndExit();
       }
     }).catch(err => Script.printErrorAndExit(err));
   }
 
-  private shutdown() {
+  //noinspection JSMethodCanBeStatic
+  private shutdown(location: string, options: Options) {
+    // Check for options
+    Script.checkCloudKeysPassed(options);
+
     console.info(chalk.bold.blue('> Shutdown cloud machines...'));
-    // TODO
+
+    switch (location) {
+      case 'aws':
+        new AwsCloud(options).shutdown();
+        break;
+      default:
+        Script.printWrongLocationEndExit();
+    }
   }
 
-  private report() {
+  //noinspection JSMethodCanBeStatic
+  private report(location: string, options: Options) {
+    // Check for options
+    Script.checkDownloadDirPassed(options);
+    Script.checkCloudKeysPassed(options);
+    Script.checkSshKeysPassed(options);
+
+    // Do
     console.info(chalk.bold.blue('> Download report from tracker...'));
-    // TODO
+    switch (location) {
+      case 'aws':
+        new AwsCloud(options).downloadReport();
+        break;
+      default:
+        Script.printWrongLocationEndExit();
+    }
+
   }
 
-  private completeTrackerOptions(options: any): Promise<any> {
+  //noinspection JSMethodCanBeStatic
+  private watch(location: string, options: Options) {
+    // Check for options
+    Script.checkCloudKeysPassed(options);
+    Script.checkSshKeysPassed(options);
+
+    console.info(chalk.bold.blue('> Watching tracker logs...'));
+    switch (location) {
+      case 'aws':
+        new AwsCloud(options).watchTrackerLogs();
+        break;
+      default:
+        Script.printWrongLocationEndExit();
+    }
+
+  }
+
+  // /////////////////////////////////////////////////
+  //  Utilities
+  // /////////////////////////////////////////////////
+
+  private completeTrackerOptions(options: Options): Promise<Options> {
     return new Promise((resolve, reject) => {
       const prompts = [];
       // Check  which option are missing ////////////////////////////////
-      if (!Script.isOptionPassed(options, 'nodes')) {
+      if (!options.nodes) {
         prompts.push({
           type: 'input',
           name: 'nodes',
@@ -101,7 +149,7 @@ export class Script {
         });
       }
 
-      if (!Script.isOptionPassed(options, 'duration')) {
+      if (!options.duration) {
         prompts.push({
           type: 'input',
           name: 'duration',
@@ -110,7 +158,7 @@ export class Script {
         });
       }
 
-      if (!Script.isOptionPassed(options, 'experiments')) {
+      if (!options.experiments) {
         prompts.push({
           type: 'input',
           name: 'experiments',
@@ -119,7 +167,7 @@ export class Script {
         });
       }
 
-      if (!Script.isOptionPassed(options, 'repetitions')) {
+      if (!options.repetitions) {
         prompts.push({
           type: 'input',
           name: 'repetitions',
@@ -128,7 +176,7 @@ export class Script {
         });
       }
 
-      if (!Script.isOptionPassed(options, 'initialSeed')) {
+      if (!options.initialSeed) {
         prompts.push({
           type: 'input',
           name: 'initialSeed',
@@ -137,7 +185,7 @@ export class Script {
         });
       }
 
-      if (!Script.isOptionPassed(options, 'reportPath')) {
+      if (!options.reportPath) {
         prompts.push({
           type: 'input',
           name: 'reportPath',
@@ -156,15 +204,36 @@ export class Script {
     });
   }
 
-  static isOptionPassed(options: any, option: string): boolean {
-    return !!options[option];
+  private static checkCloudKeysPassed(options: Options) {
+    if (!options.keys) {
+      console.error(chalk.red('Missing cloud keys. Provide them using "--keys" option.'));
+      process.exit(-1);
+    }
+  }
+
+  private static checkSshKeysPassed(options: Options) {
+    if (!options.keys) {
+      console.error(chalk.red('Missing ssh keys to access remote machines. Provide them using "--ssh-key" option.'));
+      process.exit(-1);
+    }
+  }
+
+  private static checkDownloadDirPassed(options: Options) {
+    if (!options.downloadDir) {
+      console.error(chalk.red('Missing download directory. Provide them using "--download-dir" option.'));
+      process.exit(-1);
+    }
+  }
+
+  static printWrongLocationEndExit() {
+    console.error(chalk.bold.red('Must provide a valid <location> argument.'));
+    process.exit(-1);
   }
 
   static printErrorAndExit(err: any) {
     console.error(chalk.bold.red('An error occurred:'), err);
     process.exit(-1);
   }
-
 }
 
 function parseNumericOption(value: any) {
