@@ -39,7 +39,7 @@ public final class Experiment {
 		final String id = String.format("nodes-%d__pushpull-%b__duration-%d__seed-%d__repetition-%d",
 			numberOfNodes, pullByGossip, duration, seed, repetition);
 		return new Experiment(id, numberOfNodes, pullByGossip, duration, expectedCrashes,
-			1000, 11000, 3, 10);
+			500, 6000, 3, 10);
 		// TODO: proper input of gossipTime, failTime, multicastParam and multicastMaxWait
 	}
 

@@ -10,7 +10,7 @@ public final class NodeInfo {
 	private long beatCount;
 	private Cancellable timeout;
 	private long timeoutId;
-	private int quiescence;
+	private long quiescence;
 
 	NodeInfo() {
 		beatCount = 0;
@@ -25,14 +25,13 @@ public final class NodeInfo {
 
 	public void setBeatCount(long beatCount) {
 		this.beatCount = beatCount;
-		quiescence = 0;
 	}
 
 	public void quiescent() {
 		quiescence++;
 	}
 
-	int getQuiescence() {
+	long getQuiescence() {
 		return quiescence;
 	}
 
