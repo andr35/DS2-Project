@@ -1,6 +1,7 @@
 package it.unitn.ds2.gsfd.utils;
 
 import akka.actor.Cancellable;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * Class to manage the beat count and timeout for a node.
@@ -18,13 +19,6 @@ public final class NodeInfo {
 		quiescence = 0;
 	}
 
-	public NodeInfo(Cancellable timeout) {
-		beatCount = 0;
-		timeoutId = 0;
-		this.timeout = timeout;
-		quiescence = 0;
-	}
-
 	public long getBeatCount() {
 		return beatCount;
 	}
@@ -38,7 +32,7 @@ public final class NodeInfo {
 		quiescence++;
 	}
 
-	public int getQuiescence() {
+	int getQuiescence() {
 		return quiescence;
 	}
 
@@ -50,13 +44,20 @@ public final class NodeInfo {
 		beatCount++;
 	}
 
-	public void cancelTimeout() {
+	public void setTimeout(@NotNull Cancellable timeout) {
+		if (this.timeout != null) {
+			throw new java.lang.RuntimeException("Cannot set timeout while another is active.");
+		}
+
+		this.timeout = timeout;
+	}
+
+	void cancelTimeout() {
 		if (timeout != null) timeout.cancel();
 	}
 
-	public void resetTimeout(Cancellable timeout) {
-		if (timeout == null || this.timeout == null) return;
-		this.timeout.cancel();
+	public void resetTimeout(@NotNull Cancellable timeout) {
+		cancelTimeout();
 		timeoutId++;
 		this.timeout = timeout;
 	}

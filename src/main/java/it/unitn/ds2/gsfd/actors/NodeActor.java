@@ -113,7 +113,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			.match(Stop.class, msg -> onStop())
 			.match(SelfCrash.class, msg -> onCrash())
 			.match(GossipReminder.class, msg -> sendGossip())
-			.match(Gossip.class, this::onGossip) // TODO: sliding window
+			.match(Gossip.class, this::onGossip)
 			.match(GossipReply.class, this::onGossipReply)
 			.match(Fail.class, this::onFail)
 			.match(Cleanup.class, this::onCleanup)
@@ -174,7 +174,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			if (ref != getSelf()) {
 				// schedule to self to catch failure of the node
 				Cancellable failTimeout = sendToSelf(new Fail(ref, 0), failTime);
-				nodes.put(ref, new NodeInfo(failTimeout)); // TODO: #you-know-it
+				nodes.get(ref).setTimeout(failTimeout);
 			}
 		});
 
@@ -197,6 +197,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 	private void onStop() {
 		getContext().become(notReady);
+
 		if (selfCrashTimeout != null) selfCrashTimeout.cancel();
 		if (gossipTimeout != null) gossipTimeout.cancel();
 		if (multicastTimeout != null) multicastTimeout.cancel();

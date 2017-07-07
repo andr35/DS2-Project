@@ -19,7 +19,7 @@ public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 		this.primary = primary;
 		correctNodes = new ArrayList<>(nodes);
 		correctNodes.remove(this.primary);
-		put(this.primary, new NodeInfo());
+		nodes.forEach(ref -> put(ref, new NodeInfo()));
 	}
 
 	@Override
@@ -28,16 +28,6 @@ public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 		correctNodes.clear();
 		forEach((ref, info) -> info.cancelTimeout());
 		super.clear();
-	}
-
-	@Nullable
-	@Override
-	public NodeInfo remove(Object ref) {
-		ActorRef r = (ActorRef) ref;
-		if (!correctNodes.contains(r)) {
-			return super.remove(r);
-		}
-		return null;
 	}
 
 	public void setFailed(ActorRef ref) {
@@ -82,7 +72,8 @@ public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 		// TODO: more complex function (possibly by experiment setting)
 		double randomMultiplier = 0;
 		for (int i = 0; i < sorted.size(); i++) {
-			randomMultiplier += sorted.get(candidates.get(i)).getQuiescence();
+			randomMultiplier += 1;
+			//sorted.get(candidates.get(i)).getQuiescence();
 		}
 		Random r = new Random();
 		double randomDouble = r.nextDouble() * randomMultiplier;
