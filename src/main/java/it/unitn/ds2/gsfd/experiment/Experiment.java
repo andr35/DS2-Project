@@ -176,7 +176,7 @@ public final class Experiment {
 
 		// convert reported crashed to a JSON array
 		final JsonArrayBuilder reportedCrashesForReport = Json.createArrayBuilder();
-		reportedCrashed.forEach(crash -> expectedCrashesForReport.add(
+		reportedCrashed.forEach(crash -> reportedCrashesForReport.add(
 			Json.createObjectBuilder()
 				.add("delta", crash.getDelta())
 				.add("node", crash.getNode())
