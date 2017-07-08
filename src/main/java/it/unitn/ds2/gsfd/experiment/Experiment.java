@@ -1,5 +1,9 @@
 package it.unitn.ds2.gsfd.experiment;
 
+import javax.json.*;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -32,7 +36,7 @@ public final class Experiment {
 			.boxed()
 			.map(permutation::get)
 			.map(node -> new ExpectedCrash((long) random.nextInt(duration / 2), node))  // TODO: remove /2
-			// TODO: crash within duration - failTime?
+			// TODO: crash within duration - failureDelta?
 			.collect(Collectors.toList());
 
 		// return the experiment
@@ -40,8 +44,8 @@ public final class Experiment {
 			numberOfNodes, pullByGossip, duration, seed, repetition);
 		return new Experiment(id, numberOfNodes, pullByGossip, duration, expectedCrashes,
 			500, 6000, 3, 10);
-		// TODO: proper input of gossipTime, failTime, multicastParam and multicastMaxWait
-		// TODO: multicastParam should be based on the number of nodes
+		// TODO: proper input of gossipDelta, failureDelta, multicastParameter and multicastMaxWaitDelta
+		// TODO: multicastParameter should be based on the number of nodes
 	}
 
 	// unique identifier for the experiment
@@ -51,7 +55,7 @@ public final class Experiment {
 	private final int numberOfNodes;
 
 	// gossip strategy to use: pull vs push-pull
-	private final boolean pullByGossip;
+	private final boolean pushPull;
 
 	// total duration (milliseconds) of the experiment
 	private final int duration;
@@ -63,16 +67,16 @@ public final class Experiment {
 	private final List<ReportedCrash> reportedCrashed;
 
 	// frequency of Gossip
-	private final long gossipTime;
+	private final long gossipDelta;
 
 	// time to consider a node failed
-	private final long failTime;
+	private final long failureDelta;
 
 	// parameter "a" of probability of multicast (catastrophe recovery)
-	private final double multicastParam;
+	private final double multicastParameter;
 
 	// maximum number of times a multicast can be postponed
-	private final int multicastMaxWait;
+	private final int multicastMaxWaitDelta;
 
 	// start time of the experiment
 	private Long start;
@@ -81,24 +85,24 @@ public final class Experiment {
 	private Long stop;
 
 	// initialize a new experiment
-	public Experiment(String id, int numberOfNodes, boolean pullByGossip, int duration, List<ExpectedCrash> expectedCrashes,
-					  long gossipTime, long failTime, double multicastParam, int multicastMaxWait) {
+	private Experiment(String id, int numberOfNodes, boolean pushPull, int duration, List<ExpectedCrash> expectedCrashes,
+					   long gossipDelta, long failureDelta, double multicastParameter, int multicastMaxWaitDelta) {
 		this.id = id;
 		this.numberOfNodes = numberOfNodes;
-		this.pullByGossip = pullByGossip;
+		this.pushPull = pushPull;
 		this.duration = duration;
 		this.expectedCrashes = expectedCrashes;
 		this.reportedCrashed = new LinkedList<>();
-		this.gossipTime = gossipTime;
-		this.failTime = failTime;
-		this.multicastParam = multicastParam;
-		this.multicastMaxWait = multicastMaxWait;
+		this.gossipDelta = gossipDelta;
+		this.failureDelta = failureDelta;
+		this.multicastParameter = multicastParameter;
+		this.multicastMaxWaitDelta = multicastMaxWaitDelta;
 		this.start = null;
 		this.stop = null;
 	}
 
-	public boolean isPullByGossip() {
-		return pullByGossip;
+	public boolean isPushPull() {
+		return pushPull;
 	}
 
 	public int getDuration() {
@@ -109,20 +113,20 @@ public final class Experiment {
 		return expectedCrashes;
 	}
 
-	public long getGossipTime() {
-		return gossipTime;
+	public long getGossipDelta() {
+		return gossipDelta;
 	}
 
-	public long getFailTime() {
-		return failTime;
+	public long getFailureDelta() {
+		return failureDelta;
 	}
 
-	public double getMulticastParam() {
-		return multicastParam;
+	public double getMulticastParameter() {
+		return multicastParameter;
 	}
 
-	public int getMulticastMaxWait() {
-		return multicastMaxWait;
+	public int getMulticastMaxWaitDelta() {
+		return multicastMaxWaitDelta;
 	}
 
 	public void start() {
@@ -148,16 +152,68 @@ public final class Experiment {
 		reportedCrashed.add(new ReportedCrash(delta, node, reporter));
 	}
 
-	public void generateReport() {
+	/**
+	 * Generate the report for the experiment.
+	 *
+	 * @param factory   Custom JsonWriter factory.
+	 * @param directory Path of the directory where to save the generated report.
+	 * @throws IOException If something goes wrong with writing the file.
+	 */
+	public void generateReport(JsonWriterFactory factory, String directory) throws IOException {
+
+		// make sure the experiment was previously terminated
 		if (stop == null) {
 			throw new IllegalStateException("Please call the stop() method to stop the experiment first.");
 		}
-		// TODO: write the experiment configuration and report to the disk
+
+		// convert expected crashed to a JSON array
+		final JsonArrayBuilder expectedCrashesForReport = Json.createArrayBuilder();
+		expectedCrashes.forEach(crash -> expectedCrashesForReport.add(
+			Json.createObjectBuilder()
+				.add("delta", crash.getDelta())
+				.add("node", crash.getNode())
+		));
+
+		// convert reported crashed to a JSON array
+		final JsonArrayBuilder reportedCrashesForReport = Json.createArrayBuilder();
+		reportedCrashed.forEach(crash -> expectedCrashesForReport.add(
+			Json.createObjectBuilder()
+				.add("delta", crash.getDelta())
+				.add("node", crash.getNode())
+				.add("reporter", crash.getReporter())
+		));
+
+		// generate the JSON report
+		final JsonObject report = Json.createObjectBuilder()
+			.add("id", id)
+			.add("settings", Json.createObjectBuilder()
+				.add("number_of_nodes", numberOfNodes)
+				.add("duration", duration)
+				.add("push_pull", pushPull)
+				.add("gossip_delta", gossipDelta)
+				.add("failure_delta", failureDelta)
+				.add("multicast_parameter", multicastParameter)
+				.add("multicast_max_wait_delta", multicastMaxWaitDelta)
+			)
+			.add("result", Json.createObjectBuilder()
+				.add("start_time", start)
+				.add("end_time", stop)
+				.add("expected_crashes", expectedCrashesForReport)
+				.add("reported_crashes", reportedCrashesForReport)
+			)
+			.build();
+
+		// write the report to the file
+		try (final FileWriter fileWriter = new FileWriter(directory + File.separator + id + ".json")) {
+			try (final JsonWriter jsonWriter = factory.createWriter(fileWriter)) {
+				jsonWriter.writeObject(report);
+			}
+		}
 	}
 
 	@Override
 	public String toString() {
 		return String.format("nodes=%d, duration=%ds, push_pull=%s, expected_crashes=%d",
-			numberOfNodes, duration, pullByGossip, expectedCrashes.size());
+			numberOfNodes, duration, pushPull, expectedCrashes.size());
 	}
 }

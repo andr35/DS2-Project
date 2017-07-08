@@ -16,6 +16,12 @@ import it.unitn.ds2.gsfd.messages.*;
 import it.unitn.ds2.gsfd.messages.Shutdown;
 import scala.concurrent.duration.Duration;
 
+import javax.json.Json;
+import javax.json.JsonWriterFactory;
+import javax.json.stream.JsonGenerator;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -57,10 +63,14 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 	private final Config config;
 	private final long millisBetweenExperiments;
 	private final int expectedNumberOfNodes;
+	private final String reportDirectory;
 
 	// list of experiments to perform
 	private List<Experiment> experiments;
 	private Experiment current;
+
+	// json writer -> pretty json files
+	private final JsonWriterFactory jsonWriterFactory;
 
 
 	// constructor is private... use the Props factory
@@ -83,6 +93,21 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		this.config = ConfigFactory.load();
 		this.millisBetweenExperiments = config.getLong("tracker.time-between-experiments");
 		this.expectedNumberOfNodes = config.getInt("tracker.nodes");
+		this.reportDirectory = config.getString("tracker.report-path");
+
+		// make sure the directory for the report exists
+		try {
+			Files.createDirectories(Paths.get(reportDirectory));
+		} catch (IOException e) {
+			log.error("Can not create the directory for the reports: {}", reportDirectory, e);
+			throw new RuntimeException(e);
+		}
+
+		// create the custom JSON writer factory
+		final Map<String, Object> properties = new HashMap<String, Object>(1) {{
+			put(JsonGenerator.PRETTY_PRINTING, true);
+		}};
+		this.jsonWriterFactory = Json.createWriterFactory(properties);
 	}
 
 	@Override
@@ -179,10 +204,10 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		final List<ExpectedCrash> expectedCrashes = current.getExpectedCrashes();
 		final Map<String, Long> crashesByNode = expectedCrashes.stream()
 			.collect(Collectors.toMap(ExpectedCrash::getNode, ExpectedCrash::getDelta));
-		final long gossipTime = current.getGossipTime();
-		final long failTime = current.getFailTime();
-		final double multicastParam = current.getMulticastParam();
-		final int multicastMaxWait = current.getMulticastMaxWait();
+		final long gossipTime = current.getGossipDelta();
+		final long failTime = current.getFailureDelta();
+		final double multicastParam = current.getMulticastParameter();
+		final int multicastMaxWait = current.getMulticastMaxWaitDelta();
 
 		// log the start of the experiment...
 		log.warning("StartExperiment experiment {} of {} [{}]", index + 1, experiments.size(), current.toString());
@@ -192,9 +217,9 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		nodes.forEach(node -> {
 			final String id = idFromRef(node);
 			if (crashesByNode.containsKey(id)) {
-				node.tell(StartExperiment.crash(current.isPullByGossip(), crashesByNode.get(id), nodes, gossipTime, failTime, multicastParam, multicastMaxWait), getSelf());
+				node.tell(StartExperiment.crash(current.isPushPull(), crashesByNode.get(id), nodes, gossipTime, failTime, multicastParam, multicastMaxWait), getSelf());
 			} else {
-				node.tell(StartExperiment.normal(current.isPullByGossip(), nodes, gossipTime, failTime, multicastParam, multicastMaxWait), getSelf());
+				node.tell(StartExperiment.normal(current.isPushPull(), nodes, gossipTime, failTime, multicastParam, multicastMaxWait), getSelf());
 			}
 		});
 
@@ -216,7 +241,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 	 *
 	 * @param index Index of the experiment to stop.
 	 */
-	private void onExperimentEnd(int index) {
+	private void onExperimentEnd(int index) throws IOException {
 
 		// log the end of the experiment...
 		log.warning("StopExperiment experiment {} of {}", index + 1, experiments.size());
@@ -226,7 +251,8 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 
 		// generate the report
 		experiments.get(index).stop();
-		experiments.get(index).generateReport();
+		experiments.get(index).generateReport(jsonWriterFactory, reportDirectory);
+		log.debug("Generated report for experiment {}", index + 1);
 
 		// check if this was the last experiment... in this case shutdown the system
 		if (index + 1 == experiments.size()) {

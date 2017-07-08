@@ -21,10 +21,9 @@ dependencies {
 	compile group: 'com.typesafe.akka', name: 'akka-slf4j_2.11', version: rootProject.ext.akka_version
 	compile group: 'ch.qos.logback', name: 'logback-classic', version: rootProject.ext.logback_version
 	compile group: 'commons-validator', name: 'commons-validator', version: rootProject.ext.validator_version
-
+	compile group: 'javax.json', name: 'javax.json-api', version: '1.1'
+	compile group: 'org.glassfish', name: 'javax.json', version: '1.1'
 	compileOnly group: 'com.intellij', name: 'annotations', version: rootProject.ext.annotations_version
-
-	// testCompile group: 'com.typesafe.akka', name: 'akka-testkit_2.11', version: ext.akka_version
 }
 
 /**
