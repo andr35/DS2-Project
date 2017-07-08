@@ -10,12 +10,10 @@ import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import it.unitn.ds2.gsfd.experiment.ExpectedCrash;
 import it.unitn.ds2.gsfd.experiment.Experiment;
-import it.unitn.ds2.gsfd.experiment.StartExperiment;
-import it.unitn.ds2.gsfd.experiment.StopExperiment;
-import it.unitn.ds2.gsfd.messages.Registration;
-import it.unitn.ds2.gsfd.messages.ReportCrash;
-import it.unitn.ds2.gsfd.messages.Start;
-import it.unitn.ds2.gsfd.messages.Stop;
+import it.unitn.ds2.gsfd.experiment.ScheduleExperimentStart;
+import it.unitn.ds2.gsfd.experiment.ScheduleExperimentStop;
+import it.unitn.ds2.gsfd.messages.*;
+import it.unitn.ds2.gsfd.messages.Shutdown;
 import scala.concurrent.duration.Duration;
 
 import java.util.*;
@@ -28,7 +26,15 @@ import java.util.stream.Collectors;
  */
 public final class TrackerActor extends AbstractActor implements BaseActor {
 
-	// initialize the Tracker node
+	/**
+	 * Initialize the Tracker node. Once initialized, the tracker will generate
+	 * a set of experiments, wait for a given number of nodes to register and
+	 * then start the experiments in some order. At the end of each experiment,
+	 * a report that contains the scheduled crashes and the reported once is
+	 * generated and saved as a file.
+	 *
+	 * @return Akka Props object.
+	 */
 	public static Props init() {
 		return Props.create(new Creator<TrackerActor>() {
 			private static final long serialVersionUID = 1L;
@@ -49,6 +55,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 
 	// configuration
 	private final Config config;
+	private final long millisBetweenExperiments;
 	private final int expectedNumberOfNodes;
 
 	// list of experiments to perform
@@ -74,6 +81,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 
 		// load the configuration
 		this.config = ConfigFactory.load();
+		this.millisBetweenExperiments = config.getLong("tracker.time-between-experiments");
 		this.expectedNumberOfNodes = config.getInt("tracker.nodes");
 	}
 
@@ -83,21 +91,51 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		log.info("Tracker started... expect {} nodes to start the experiments", expectedNumberOfNodes);
 	}
 
-	/**
-	 * For each type of message, call the relative callback
-	 * to keep this method short and clean.
-	 */
 	@Override
 	public Receive createReceive() {
 		return receiveBuilder()
-			.match(StartExperiment.class, msg -> onExperimentStart(msg.getExperiment()))
-			.match(StopExperiment.class, msg -> onExperimentEnd(msg.getExperiment()))
 			.match(Registration.class, msg -> onNodeRegistration())
-			.match(ReportCrash.class, this::onReportCrash)
-			.matchAny(msg -> log.warning("Received unknown message -> " + msg))
+			.match(ScheduleExperimentStart.class, msg -> onExperimentStart(msg.getExperiment()))
+			.match(ScheduleExperimentStop.class, msg -> onExperimentEnd(msg.getExperiment()))
+			.match(Crash.class, msg -> onCrash())
+			.match(CrashReport.class, this::onReportCrash)
+			.matchAny(msg -> log.error("Received unknown message -> " + msg))
 			.build();
 	}
 
+	/**
+	 * This method is called when a node registers itself to the tracker.
+	 * The tracker will either accept the registration (if the experiments
+	 * are not yet started) or reject it. When all nodes have registered,
+	 * the method {@link #onReady()} is called and the experiments are started.
+	 */
+	private void onNodeRegistration() {
+
+		// too many nodes... there is a problem!
+		if (nodes.size() >= expectedNumberOfNodes) {
+			log.error("Too many node joined already... can not accept Node {}", idFromRef(getSender()));
+		}
+
+		// correct status...
+		else {
+			log.debug("Registration of Node {}", idFromRef(getSender()));
+
+			// add the new node to the tracked ones
+			nodes.add(getSender());
+
+			// check if I am ready to start the experiments
+			if (nodes.size() == expectedNumberOfNodes) {
+				log.info("Got {} of {} nodes. Ready to start the experiment.", nodes.size(), expectedNumberOfNodes);
+				onReady();
+			}
+		}
+	}
+
+	/**
+	 * This method is called when the tracker is ready to start the experiments,
+	 * i.e. all nodes have registered to the tracker. The tracker generates the
+	 * experiments and starts them in order, one at a time.
+	 */
 	private void onReady() {
 
 		// load the configuration
@@ -124,30 +162,39 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		onExperimentStart(0);
 	}
 
+	/**
+	 * This method is called when a the tracker should start a new experiment.
+	 * The tracker schedules schedules the experiments one after the other, but
+	 * waits some time between the end of one experiment and the start of the
+	 * next one to make sure all nodes have time to reset their internal status.
+	 *
+	 * @param index Index of the experiment to start.
+	 */
 	private void onExperimentStart(int index) {
 
-		// extract the experiment
+		// extract the current experiment
 		current = experiments.get(index);
+
+		// extract the details of the experiment
 		final List<ExpectedCrash> expectedCrashes = current.getExpectedCrashes();
 		final Map<String, Long> crashesByNode = expectedCrashes.stream()
 			.collect(Collectors.toMap(ExpectedCrash::getNode, ExpectedCrash::getDelta));
 		final long gossipTime = current.getGossipTime();
 		final long failTime = current.getFailTime();
-		final double mParam = current.getMulticastParam();
+		final double multicastParam = current.getMulticastParam();
+		final int multicastMaxWait = current.getMulticastMaxWait();
 
-		// TODO: multicastParam should be based on the number of nodes
-		final int mMaxWait = current.getMulticastMaxWait();
-
-		log.info("Start experiment {} of {} [{}]", index + 1, experiments.size(), current.toString());
+		// log the start of the experiment...
+		log.warning("StartExperiment experiment {} of {} [{}]", index + 1, experiments.size(), current.toString());
 
 		// start the experiment
 		current.start();
 		nodes.forEach(node -> {
 			final String id = idFromRef(node);
 			if (crashesByNode.containsKey(id)) {
-				node.tell(Start.crash(current.isPullByGossip(), crashesByNode.get(id), nodes, gossipTime, failTime, mParam, mMaxWait), getSelf());
+				node.tell(StartExperiment.crash(current.isPullByGossip(), crashesByNode.get(id), nodes, gossipTime, failTime, multicastParam, multicastMaxWait), getSelf());
 			} else {
-				node.tell(Start.normal(current.isPullByGossip(), nodes, gossipTime, failTime, mParam, mMaxWait), getSelf());
+				node.tell(StartExperiment.normal(current.isPullByGossip(), nodes, gossipTime, failTime, multicastParam, multicastMaxWait), getSelf());
 			}
 		});
 
@@ -155,17 +202,27 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		getContext().system().scheduler().scheduleOnce(
 			Duration.create(experiments.get(index).getDuration(), TimeUnit.MILLISECONDS),
 			getSelf(),
-			new StopExperiment(index),
+			new ScheduleExperimentStop(index),
 			getContext().system().dispatcher(),
 			getSelf()
 		);
 	}
 
+	/**
+	 * This method is called when the tracker should stop an ongoing experiment.
+	 * The tracker will inform all nodes to stop their activities and reset the
+	 * internal state. Then, it will generate the report. Finally, it will
+	 * schedule the next experiment after some time.
+	 *
+	 * @param index Index of the experiment to stop.
+	 */
 	private void onExperimentEnd(int index) {
-		log.info("Stop experiment {} of {}", index + 1, experiments.size());
+
+		// log the end of the experiment...
+		log.warning("StopExperiment experiment {} of {}", index + 1, experiments.size());
 
 		// send stop to all the nodes
-		nodes.forEach(node -> node.tell(new Stop(), getSelf()));
+		nodes.forEach(node -> node.tell(new StopExperiment(), getSelf()));
 
 		// generate the report
 		experiments.get(index).stop();
@@ -173,50 +230,49 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 
 		// check if this was the last experiment... in this case shutdown the system
 		if (index + 1 == experiments.size()) {
-			log.warning("No more experiment to perform");
-			// TODO: stop the system
+			log.warning("No more experiment to perform... shutdown the cluster");
+			nodes.forEach(node -> node.tell(new Shutdown(), getSelf()));
+			getContext().getSystem().terminate();
 		}
 
 		// wait a bit before starting the next experiment
-		// TODO: it this time ok?
 		else {
-			log.debug("Wait some time before starting the next experiment...");
+			log.debug("Wait {} seconds before starting the next experiment...", millisBetweenExperiments / 1000);
 			getContext().system().scheduler().scheduleOnce(
-				Duration.create(5, TimeUnit.SECONDS),
+				Duration.create(millisBetweenExperiments, TimeUnit.MILLISECONDS),
 				getSelf(),
-				new StartExperiment(index + 1),
+				new ScheduleExperimentStart(index + 1),
 				getContext().system().dispatcher(),
 				getSelf()
 			);
 		}
 	}
 
-	private void onNodeRegistration() {
-
-		// too many nodes... there is a problem!
-		if (nodes.size() >= expectedNumberOfNodes) {
-			log.error("Too many node joined already... can not accept Node {}", idFromRef(getSender()));
-		}
-
-		// correct status...
-		else {
-			log.debug("Registration of Node {}", idFromRef(getSender()));
-
-			// add the new node to the tracked ones
-			nodes.add(getSender());
-
-			// check if I am ready to start the experiments
-			if (nodes.size() == expectedNumberOfNodes) {
-				log.info("Got {} of {} nodes. Ready to start the experiment.", nodes.size(), expectedNumberOfNodes);
-				onReady();
-			}
-		}
+	/**
+	 * This method is called when a node simulates a crash. This is used ONLY as debug,
+	 * since the tracker already knows the simulated crashes.
+	 */
+	private void onCrash() {
+		log.info("Node {} crash", idFromRef(getSender()));
 	}
 
-	private void onReportCrash(ReportCrash msg) {
-		log.warning("Report crash of node {} (from node {})", idFromRef(msg.getNode()), idFromRef(getSender()));
+	/**
+	 * This method is called when a node detects a failure and reports it to the tracker.
+	 * The tracker simply add the failure report to the experiment in order to include
+	 * it in the final report.
+	 *
+	 * @param msg Crash report, with the details of the crashed node and who detected it.
+	 */
+	private void onReportCrash(CrashReport msg) {
+		log.info("Report crash of node {} (from node {})", idFromRef(msg.getNode()), idFromRef(getSender()));
+
+		// memorize the crash report
+		if (current != null) {
+			current.addCrash(idFromRef(msg.getNode()), idFromRef(getSender()));
+		} else {
+			log.error("Crash report outside an experiment... there must be an error!");
+		}
 
 		// TODO: put in the start and stop the experiment number???
-		current.addCrash(idFromRef(msg.getNode()), idFromRef(getSender()));
 	}
 }

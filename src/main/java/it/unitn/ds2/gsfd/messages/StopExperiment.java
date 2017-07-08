@@ -7,5 +7,5 @@ import java.io.Serializable;
  * When a node receives this message, it should stop
  * the protocol and reset its state.
  */
-public final class Stop implements Serializable {
+public final class StopExperiment implements Serializable {
 }

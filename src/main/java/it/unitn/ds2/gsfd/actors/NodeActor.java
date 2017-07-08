@@ -7,10 +7,8 @@ import akka.actor.Props;
 import akka.event.DiagnosticLoggingAdapter;
 import akka.event.Logging;
 import akka.japi.Creator;
-import it.unitn.ds2.gsfd.messages.Registration;
-import it.unitn.ds2.gsfd.messages.ReportCrash;
-import it.unitn.ds2.gsfd.messages.Start;
-import it.unitn.ds2.gsfd.messages.Stop;
+import it.unitn.ds2.gsfd.messages.*;
+import it.unitn.ds2.gsfd.messages.Shutdown;
 import it.unitn.ds2.gsfd.protocol.*;
 import it.unitn.ds2.gsfd.utils.NodeMap;
 import scala.concurrent.duration.Duration;
@@ -21,15 +19,20 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Akka BaseActor that implements the node's behaviour.
+ * Node: this actor implements the gossip style failure detector system
+ * described in the paper "A Gossip-Style Failure Detection Service".
+ * The node simulates crashes and reports the detected one to the central tracker.
  */
 public final class NodeActor extends AbstractActor implements BaseActor {
 
 	/**
 	 * Initialize a new node which will register itself to the Tracker node.
+	 * Once registered, the node will wait for commands from the tracker.
+	 * The tracker starts and stops experiments, schedules crashes and collect
+	 * the detected failures.
 	 *
 	 * @param trackerAddress Akka address of the tracker to contact.
-	 * @return Props.
+	 * @return Akka Props object.
 	 */
 	public static Props init(final String trackerAddress) {
 		return Props.create(new Creator<NodeActor>() {
@@ -46,11 +49,11 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	private final String trackerAddress;
 
 	// with the newest Akka version actors are state machines...
-	// if ready, accepts messages other than Start and Stop
+	// if ready, accepts messages other than StartExperiment and StopExperiment
 	private Receive ready;
 	private Receive notReady;
 
-	// timeout to simulate crash; cancelled by Stop message.
+	// timeout to simulate crash; cancelled by StopExperiment message.
 	private Cancellable selfCrashTimeout;
 
 	// time without heartbeat update to consider a node failed
@@ -106,10 +109,19 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		this.log = Logging.getLogger(this);
 		this.log.setMDC(mdc);
 
-		// set ready and notReady behavior
+		// messages to accept in the NOT_READY state (before an experiment)
+		notReady = receiveBuilder()
+			.match(Shutdown.class, msg -> onShutdown())
+			.match(StartExperiment.class, this::onStart)
+			.match(StopExperiment.class, msg -> onStop())
+			.matchAny(msg -> log.warning("Dropped message -> " + msg))
+			.build();
+
+		// messages to accept in the READY state (during an experiment)
 		ready = receiveBuilder()
-			.match(Start.class, this::onStart)
-			.match(Stop.class, msg -> onStop())
+			.match(Shutdown.class, msg -> onShutdown())
+			.match(StartExperiment.class, this::onStart)
+			.match(StopExperiment.class, msg -> onStop())
 			.match(SelfCrash.class, msg -> onCrash())
 			.match(GossipReminder.class, msg -> sendGossip())
 			.match(Gossip.class, this::onGossip)
@@ -118,21 +130,17 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			.match(Cleanup.class, this::onCleanup)
 			.match(CatastropheReminder.class, msg -> sendMulticast())
 			.match(CatastropheMulticast.class, this::onMulticast)
-			.matchAny(msg -> log.warning("Received unknown message -> " + msg))
-			.build();
-		notReady = receiveBuilder()
-			.match(Start.class, this::onStart)
-			.match(Stop.class, msg -> onStop())
-			.matchAny(msg -> log.warning("Dropped message -> " + msg))
+			.matchAny(msg -> log.error("Received unknown message -> " + msg))
 			.build();
 
+		// at the beginning, we must wait for the tracker -> NOT_READY
 		getContext().become(notReady);
 	}
 
 	@Override
 	public void preStart() throws Exception {
 		super.preStart();
-		log.info("Start... register on the Tracker");
+		log.info("StartExperiment... register on the Tracker");
 		sendToTracker(new Registration());
 	}
 
@@ -143,13 +151,20 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	@Override
 	public Receive createReceive() {
 		return receiveBuilder()
-			.match(Start.class, msg -> getContext().become(ready))
-			.match(Stop.class, msg -> getContext().become(notReady))
+			.match(Shutdown.class, msg -> onShutdown())
+			.match(StartExperiment.class, msg -> getContext().become(ready))
+			.match(StopExperiment.class, msg -> getContext().become(notReady))
 			.match(SelfCrash.class, msg -> getContext().become(notReady))
+			.matchAny(msg -> log.error("Received unknown message -> " + msg))
 			.build();
 	}
 
-	private void onStart(Start msg) {
+	private void onShutdown() {
+		log.warning("Tracker requested to shutdown the system... terminate");
+		getContext().getSystem().terminate();
+	}
+
+	private void onStart(StartExperiment msg) {
 
 		getContext().become(ready);
 
@@ -206,6 +221,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 	private void onCrash() {
 		getContext().become(notReady);
+		sendToTracker(new Crash());
 		log.info("onCrash complete");
 	}
 
@@ -266,7 +282,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		if (nodes.get(failing).getTimeoutId() == failId) {
 			// remove from correct nodes and report to Tracker
 			nodes.setFailed(failing);
-			sendToTracker(new ReportCrash(failing));
+			sendToTracker(new CrashReport(failing));
 			log.info("Node {} reported as failed", idFromRef(failing));
 		} else {
 			log.warning("Dropped Fail message (expected Id: {}, found: {}) -> {}",
@@ -288,7 +304,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			log.info("Node {} cleanup", idFromRef(failed));
 		} else {
 			log.warning("Dropped Cleanup message (expected Id: {}, found: {}) -> {}",
-			nodes.get(failed).getTimeoutId(), cleanId, msg.toString());
+				nodes.get(failed).getTimeoutId(), cleanId, msg.toString());
 		}
 	}
 

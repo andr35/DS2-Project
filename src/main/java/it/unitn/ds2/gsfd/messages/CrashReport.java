@@ -7,12 +7,12 @@ import java.io.Serializable;
 /**
  * Message used to report a crash to the Tracker.
  */
-public final class ReportCrash implements Serializable {
+public final class CrashReport implements Serializable {
 
 	// crashed node
 	private final ActorRef node;
 
-	public ReportCrash(ActorRef node) {
+	public CrashReport(ActorRef node) {
 		this.node = node;
 	}
 

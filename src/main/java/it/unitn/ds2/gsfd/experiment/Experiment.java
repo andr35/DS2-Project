@@ -31,7 +31,7 @@ public final class Experiment {
 		final List<ExpectedCrash> expectedCrashes = IntStream.of(crashes)
 			.boxed()
 			.map(permutation::get)
-			.map(node -> new ExpectedCrash((long) random.nextInt(duration/2), node))  // TODO: remove /2
+			.map(node -> new ExpectedCrash((long) random.nextInt(duration / 2), node))  // TODO: remove /2
 			// TODO: crash within duration - failTime?
 			.collect(Collectors.toList());
 
@@ -41,6 +41,7 @@ public final class Experiment {
 		return new Experiment(id, numberOfNodes, pullByGossip, duration, expectedCrashes,
 			500, 6000, 3, 10);
 		// TODO: proper input of gossipTime, failTime, multicastParam and multicastMaxWait
+		// TODO: multicastParam should be based on the number of nodes
 	}
 
 	// unique identifier for the experiment
@@ -156,11 +157,7 @@ public final class Experiment {
 
 	@Override
 	public String toString() {
-		return "Experiment{" +
-			"numberOfNodes=" + numberOfNodes +
-			", pullByGossip=" + pullByGossip +
-			", duration=" + duration +
-			", expectedCrashes=" + expectedCrashes.size() +
-			'}';
+		return String.format("nodes=%d, duration=%ds, push_pull=%s, expected_crashes=%d",
+			numberOfNodes, duration, pullByGossip, expectedCrashes.size());
 	}
 }

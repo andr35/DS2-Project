@@ -5,40 +5,41 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.Serializable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Message used to start a new experiment.
  * The tracker sends this to all nodes and tells each node
  * whether it should crash at some point or not.
  */
-public final class Start implements Serializable {
+public final class StartExperiment implements Serializable {
 
 	/**
-	 * Create a new Start message for a correct node.
+	 * Create a new StartExperiment message for a correct node.
 	 * TODO: docs
 	 *
 	 * @param nodes List of nodes in the system.
-	 * @return Start message.
+	 * @return StartExperiment message.
 	 */
-	public static Start normal(boolean pullByGossip, @NotNull Collection<ActorRef> nodes,
-							   @NotNull Long gossipTime, @NotNull Long failTime,
-							   @NotNull Double multicastParam, @NotNull Integer multicastMaxWait) {
-		return new Start(pullByGossip, null, nodes, gossipTime, failTime, multicastParam, multicastMaxWait);
+	public static StartExperiment normal(boolean pullByGossip, @NotNull Collection<ActorRef> nodes,
+										 long gossipTime, long failTime, double multicastParam, int multicastMaxWait) {
+		return new StartExperiment(pullByGossip, null, nodes, gossipTime, failTime, multicastParam, multicastMaxWait);
 	}
 
 	/**
-	 * Create a new Start message for a fault node.
+	 * Create a new StartExperiment message for a fault node.
 	 * TODO: docs
 	 *
 	 * @param delta Delay (in milliseconds) after which the node should simulate a crash.
 	 * @param nodes List of nodes in the system.
-	 * @return Start message.
+	 * @return StartExperiment message.
 	 */
-	public static Start crash(boolean pullByGossip, @NotNull Long delta, @NotNull Collection<ActorRef> nodes,
-							  @NotNull long gossipTime, @NotNull long failTime,
-							  @NotNull double multicastParam, @NotNull int multicastMaxWait) {
-		return new Start(pullByGossip, delta, nodes, gossipTime, failTime, multicastParam, multicastMaxWait);
+	public static StartExperiment crash(boolean pullByGossip, long delta, @NotNull Collection<ActorRef> nodes,
+										long gossipTime, long failTime, double multicastParam, int multicastMaxWait) {
+		return new StartExperiment(pullByGossip, delta, nodes, gossipTime, failTime, multicastParam, multicastMaxWait);
 	}
 
 	// gossip strategy to use: pull vs push-pull
@@ -53,16 +54,15 @@ public final class Start implements Serializable {
 	private final List<ActorRef> nodes;
 
 	/**
-	 * Create a new Start message.
+	 * Create a new StartExperiment message.
 	 * TODO: docs
 	 *
 	 * @param delta If null, the node will not simulate a crash.
 	 *              If not null, the node will simulate a crash after delta milliseconds.
 	 * @param nodes List of nodes in the system.
 	 */
-	private Start(boolean pullByGossip, @Nullable Long delta, @NotNull Collection<ActorRef> nodes,
-				  @NotNull long gossipTime, @NotNull long failTime,
-				  @NotNull double multicastParam, @NotNull int multicastMaxWait) {
+	private StartExperiment(boolean pullByGossip, @Nullable Long delta, @NotNull Collection<ActorRef> nodes,
+							long gossipTime, long failTime, double multicastParam, int multicastMaxWait) {
 		this.pullByGossip = pullByGossip;
 		this.delta = delta;
 		this.nodes = Collections.unmodifiableList(new ArrayList<>(nodes));

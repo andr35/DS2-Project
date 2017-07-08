@@ -3,13 +3,13 @@ package it.unitn.ds2.gsfd.experiment;
 import java.io.Serializable;
 
 /**
- * Message used from the Tracker to stop the running experiment.
+ * Message used from the Tracker to start the running experiment.
  */
-public final class StopExperiment implements Serializable {
+public final class ScheduleExperimentStart implements Serializable {
 
 	private final int experiment;
 
-	public StopExperiment(int experiment) {
+	public ScheduleExperimentStart(int experiment) {
 		this.experiment = experiment;
 	}
 
