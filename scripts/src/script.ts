@@ -39,6 +39,7 @@ export class Script {
       .command('report <location>')
       .description('Download reports from a tracker')
       .option('-d --download-dir <n>', 'Directory where put downloaded reports')
+      .option('-r --report-dir <n>', 'Directory where reports are stored on the remote machine')
       .action((extraArg: string, options: any) => this.report(extraArg, {...options, ...options.parent}));
 
     program
@@ -222,6 +223,10 @@ export class Script {
   private static checkDownloadDirPassed(options: Options) {
     if (!options.downloadDir) {
       console.error(chalk.red('Missing download directory. Provide them using "--download-dir" option.'));
+      process.exit(-1);
+    }
+    if (!options.reportDir) {
+      console.error(chalk.red('Missing report directory. Provide them using "--report-dir" option.'));
       process.exit(-1);
     }
   }

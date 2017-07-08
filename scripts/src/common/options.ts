@@ -10,4 +10,5 @@ export interface Options {
   sshKey?: string;
   sshPassphrase?: string;
   downloadDir?: string;
+  reportDir?: string;
 }
