@@ -1,10 +1,11 @@
 {
   "compilerOptions": {
     "module": "commonjs",
-    "target": "ES6",
+    "target": "es6",
     "rootDir": "src",
     "outDir": "dist",
     "sourceMap": true,
+    "removeComments": false,
     "types": [
       "node"
     ]

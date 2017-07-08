@@ -79,6 +79,7 @@ export class AwsCloud implements Cloud {
    * @return {Promise<null>} Done
    */
   async init(): Promise<void> {
+    console.log(chalk.blue('> Fetching AWS regions...'));
     try {
       this.regions = await AwsCloud.fetchRegions();
       for (let region of this.regions) {
@@ -99,36 +100,31 @@ export class AwsCloud implements Cloud {
    * @return {Promise<void>}
    */
   async startExperiment() {
-    await this.init();
-
     try {
       // Build project
       await ProjectUtils.buildProject();
 
-      // Create tracker
-      let reg = this.getRandomRegion();
-      const trackerInstance = await this.createEC2Instance(0, reg, true);
-      this.nodes[trackerInstance.InstanceId] = {
-        instance: trackerInstance,
-        region: reg,
-        tracker: true,
-        id: 0
-      };
+      // Fetch AWS regions
+      await this.init();
 
-      // Create nodes
-      for (let i = 1; i <= this.options.nodes; i++) {
-        reg = this.getRandomRegion();
-        const trackerInstance = await this.createEC2Instance(i, reg);
-        this.nodes[trackerInstance.InstanceId] = {
-          instance: trackerInstance,
-          region: reg,
-          id: i
-        };
-      }
+      // Create instances (both tracker and nodes)
+      const promises = Array.from(Array(this.options.nodes + 1).keys()).map(id => {
+        const region = this.getRandomRegion();
+        const tracker = (id == 0);
+        return this.createEC2Instance(id, region, tracker).then(instance => {
+          return {
+            instance: instance,
+            region: region,
+            id: id,
+            tracker: tracker
+          }
+        });
+      });
+      const nodes = await Promise.all(promises);
+      nodes.forEach(node => this.nodes[node.instance.InstanceId] = node);
 
       // Deploy project on machines and start it
-      await this.startDeployTimeout(30000);
-
+      await this.startDeployTimeout(5000);
       console.log(chalk.bold.green('> Experiment started successfully. Nodes:'), this.deployedNodes.map(n => {
         //noinspection PointlessBooleanExpressionJS
         return {
@@ -139,6 +135,7 @@ export class AwsCloud implements Cloud {
           region: n.region
         }
       }));
+
     } catch (e) {
       console.log(chalk.bold.red('> An error occurred while starting experiment'), e);
     }
@@ -341,17 +338,18 @@ export class AwsCloud implements Cloud {
       throw AwsCloud.ec2NodeString(node) + ' Copying project files...';
     } else {
       this.nodes[node.instance.InstanceId].projectCopiedPending = true;
-      console.log(chalk.blue(`> Copy project in node ${AwsCloud.ec2NodeString(node)}`));
+      console.log(chalk.blue(`> Coping project to node ${AwsCloud.ec2NodeString(node)}...`));
       try {
         await new Promise((resolve, reject) => {
           scp2.scp(ProjectUtils.BUILD_PATH + '/' + ProjectUtils.JAR_NAME, {
             host: node.instance.PublicIpAddress,
             username: AwsCloud.EC2_INSTANCE_USERNAME,
-            privateKey: fs.readFileSync(path.resolve(this.options.sshKey)),
+            privateKey: fs.readFileSync(path.resolve(AwsCloud.resolve(this.options.sshKey))),
             passphrase: this.options.sshPassphrase ? this.options.sshPassphrase : undefined,
             path: AwsCloud.EC2_INSTANCE_BASE_PATH
           }, err => err ? reject(err) : resolve());
         });
+        console.log(chalk.green(`> Copied project in node ${AwsCloud.ec2NodeString(node)}`));
         // Update node status
         this.nodes[node.instance.InstanceId].projectCopied = true;
         this.nodes[node.instance.InstanceId].projectCopiedPending = false;
@@ -420,11 +418,8 @@ export class AwsCloud implements Cloud {
    * @return {Promise<void>}
    */
   private startDeployTimeout(timeout: number): Promise<void> {
-    return new Promise((resolve) => {
-      // Limit timeout
-      timeout = timeout > 10000 ? timeout : 10000;
-      timeout = timeout < 120000 ? timeout : 120000;
-      console.log(chalk.yellow(`> Wait ${timeout / 1000} sec before deploy...`));
+    return new Promise<void>((resolve) => {
+      console.log(chalk.yellow(`> Wait ${timeout / 1000} seconds before deploy...`));
 
       // Set timeout
       setTimeout(async () => {
@@ -451,11 +446,11 @@ export class AwsCloud implements Cloud {
             return resolve();
           } else { // Some nodes still need to be deployed -> retry timeout
             console.log(chalk.yellow(`> Timeout round completed but some node is still not running`), result);
-            return resolve(await this.startDeployTimeout(timeout + 20000));
+            return resolve(await this.startDeployTimeout(timeout));
           }
         } catch (err) { // Some node fail the deploy -> set a new timeout
           console.log(chalk.yellow(`> Timeout round completed but some node fail`), err);
-          return resolve(await this.startDeployTimeout(timeout + 20000));
+          return resolve(await this.startDeployTimeout(timeout));
         }
       }, timeout);
     });
@@ -492,7 +487,8 @@ export class AwsCloud implements Cloud {
    */
   private async isMachineRunning(node: EC2Machine): Promise<boolean> {
     const data = await this.ec2[node.region].describeInstanceStatus({InstanceIds: [node.instance.InstanceId]}).promise();
-    return data.InstanceStatuses[0].InstanceState.Name === 'running';
+    const instance = data.InstanceStatuses[0];
+    return instance && instance.InstanceState.Name === 'running';
   }
 
   /**
@@ -527,11 +523,12 @@ export class AwsCloud implements Cloud {
             const chalkColor = code === 0 ? chalk.green : chalk.red;
             console.log(chalkColor(`> Machine ${AwsCloud.ec2NodeString(node)}. Java install result code ${code}`));
             return (code === 0) ? resolve() : reject('Java installation failed');
-          }).on('data', data => {
-            console.log(chalk.blue(`> ${AwsCloud.ec2NodeString(node)} STDOUT: ${data}`));
-          }).stderr.on('data', data => {
-            console.log(chalk.red(`> ${AwsCloud.ec2NodeString(node)} STDERR: ${data}`));
           });
+          // .on('data', data => {
+          //   console.log(chalk.blue(`> ${AwsCloud.ec2NodeString(node)} STDOUT: ${data}`));
+          // }).stderr.on('data', data => {
+          //   console.log(chalk.red(`> ${AwsCloud.ec2NodeString(node)} STDERR: ${data}`));
+          // });
         }
       });
     });
@@ -569,7 +566,6 @@ export class AwsCloud implements Cloud {
   }
 
   private async downloadStuff(ip: string, src: string, dest: string) {
-
     await new Promise((resolve, reject) => {
       scp2.scp({
         host: ip,
@@ -579,7 +575,6 @@ export class AwsCloud implements Cloud {
         path: src
       }, path.resolve(dest) + '/', err => err ? reject(err) : resolve());
     });
-
   }
 
   private async downloadDir(ip: string, src: string, dest: string) {
@@ -612,7 +607,7 @@ export class AwsCloud implements Cloud {
    * @return {CloudKeys} Aws Keys.
    */
   private readKeys(): CloudKeys {
-    const p = path.resolve(this.options.keys);
+    const p = AwsCloud.resolve(this.options.keys)
     const ck: CloudKeys = JSON.parse(fs.readFileSync(p, 'utf8'));
     if (!ck.accessKey || !ck.secretKey) {
       console.log(chalk.bold.red('> Missing "accessKey" or "secretKey" in key file'));
@@ -638,7 +633,7 @@ export class AwsCloud implements Cloud {
         (options.repetitions ? `REPETITIONS=${options.repetitions} ` : ``) +
         (options.initialSeed ? `INITIAL_SEED=${options.initialSeed} ` : ``) +
         (options.reportPath ? `REPORT_PATH=${options.reportPath} ` : ``) +
-        `java -jar ${ProjectUtils.JAR_NAME} tracker > ${ProjectUtils.EC2_LOG_PATH} &`;
+        `java -jar ${ProjectUtils.JAR_NAME} tracker | tee >(cat > ${ProjectUtils.EC2_LOG_PATH}) &`;
     } else {
       return `HOST=${myIp} PORT=${10000 + id} ID=${id} java -jar ${ProjectUtils.JAR_NAME} node ${this.trackerIp} 10000 > ${ProjectUtils.EC2_LOG_PATH} &`;
     }
@@ -689,6 +684,14 @@ export class AwsCloud implements Cloud {
    */
   private static ec2NodeString(node: EC2Machine): string {
     return AwsCloud.ec2InstanceString(node.instance.InstanceId, node.region, node.id, node.instance.PublicIpAddress);
+  }
+
+  private static resolve(name: String): string {
+    if (name[0] === '~') {
+      return path.join(process.env.HOME, name.slice(1));
+    } else {
+      return path.resolve(name);
+    }
   }
 }
 

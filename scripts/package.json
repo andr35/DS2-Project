@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
-    "build": "tsc --sourceMap false",
+    "build": "tsc",
     "build:w": "tsc --watch",
     "clean": "rm -r dist"
   },

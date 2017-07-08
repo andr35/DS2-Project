@@ -155,7 +155,7 @@ export class Script {
         prompts.push({
           type: 'input',
           name: 'duration',
-          message: 'Duration of an experiment?',
+          message: 'Duration of an experiment (milliseconds)?',
           validate: input => greaterThanZero(input)
         });
       }
@@ -184,14 +184,6 @@ export class Script {
           name: 'initialSeed',
           message: 'Initial seed?',
           validate: input => greaterThanZero(input)
-        });
-      }
-
-      if (!options.reportPath) {
-        prompts.push({
-          type: 'input',
-          name: 'reportPath',
-          message: 'Report path?'
         });
       }
 
@@ -226,8 +218,7 @@ export class Script {
       process.exit(-1);
     }
     if (!options.reportDir) {
-      console.error(chalk.red('Missing report directory. Provide them using "--report-dir" option.'));
-      process.exit(-1);
+      options.reportDir = '/tmp/gossip-style-failure-detector'
     }
   }
 
