@@ -23,7 +23,7 @@ export class Script {
       .command('start <location>')
       .description('Start an experiment (in local / aws)')
       .option('-n --nodes <n>', 'Number of nodes to use in the experiment', parseNumericOption)
-      .option('-d --duration <n>', 'Duration of an experiment (in seconds)', parseNumericOption)
+      .option('-d --duration <n>', 'Duration of an experiment (in milliseconds)', parseNumericOption)
       .option('-e --experiments <n>', 'Number of experiments', parseNumericOption)
       .option('-z --repetitions <n>', 'Repeat experiment n times', parseNumericOption)
       .option('-i --initial-seed <n>', 'Initial seed', parseNumericOption)
@@ -218,7 +218,9 @@ export class Script {
       process.exit(-1);
     }
     if (!options.reportDir) {
-      options.reportDir = '/tmp/gossip-style-failure-detector'
+      const repDir = '/tmp/gossip-style-failure-detector';
+      console.log(chalk.yellow('No report directory provided with "--report-dir" option. Use default ' + repDir));
+      options.reportDir = repDir;
     }
   }
 
