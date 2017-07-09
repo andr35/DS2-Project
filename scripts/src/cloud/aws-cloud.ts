@@ -4,7 +4,6 @@ import {Cloud} from './cloud';
 import {Options} from '../common/options';
 import {CloudKeys} from '../common/cloud-keys';
 import {ProjectUtils} from "../common/utils";
-import {Client} from "ssh2";
 import * as aws from 'aws-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -22,6 +21,8 @@ interface EC2Machine {
   projectCopiedPending?: boolean;
   projectStarted?: boolean;
   projectStartedPending?: boolean;
+  installJavaComplete?: boolean;
+  installJavaPending?: boolean;
 }
 
 export class AwsCloud implements Cloud {
@@ -127,7 +128,9 @@ export class AwsCloud implements Cloud {
       }
 
       // Deploy project on machines and start it
-      await this.startDeployTimeout(30000);
+      await new Promise((resolve) => {
+        this.startDeployTimeout(30000, resolve);
+      });
 
       console.log(chalk.bold.green('> Experiment started successfully. Nodes:'), this.deployedNodes.map(n => {
         //noinspection PointlessBooleanExpressionJS
@@ -139,6 +142,7 @@ export class AwsCloud implements Cloud {
           region: n.region
         }
       }));
+      process.exit(0);
     } catch (e) {
       console.log(chalk.bold.red('> An error occurred while starting experiment'), e);
     }
@@ -355,6 +359,7 @@ export class AwsCloud implements Cloud {
         // Update node status
         this.nodes[node.instance.InstanceId].projectCopied = true;
         this.nodes[node.instance.InstanceId].projectCopiedPending = false;
+        console.log(chalk.green(`> Project copied in node ${AwsCloud.ec2NodeString(node)}`));
         return;
       } catch (err) {
         this.nodes[node.instance.InstanceId].projectCopiedPending = false;
@@ -377,31 +382,45 @@ export class AwsCloud implements Cloud {
       throw AwsCloud.ec2NodeString(node) + ' Project start is pending';
     } else {
       this.nodes[node.instance.InstanceId].projectStartedPending = true;
-      // Install Java
       // Start project
       await new Promise((resolve, reject) => {
         const sshConnection = new ssh2.Client();
         sshConnection.on('ready', async () => {
           console.log(chalk.green(`> SSH connection with "${AwsCloud.ec2NodeString(node)}" established. Start project...`));
+          // Start project
+          console.log(chalk.blue(`> Run project on machine ${AwsCloud.ec2NodeString(node)}...`));
 
-          try {
-            await this.installJava(sshConnection, node);
+          const cmd = this.getStartProjectCmd(node.id, this.options, node.instance.PublicIpAddress, node.tracker);
+          sshConnection.exec(cmd, (err, stream) => {
+            if (err) {
+              reject(err);
+            } else {
+              stream.on('close', code => {
+                const chalkColor = code === 0 ? chalk.green : chalk.red;
+                console.log(chalkColor(`> Start project on ${AwsCloud.ec2NodeString(node)} closed with code ${code}`));
+                sshConnection.end();
 
-            // Start project
-            await this.sshRunProject(sshConnection, node);
-
-            // Everything ok
-            if (node.tracker) { // When tracker is running, "publish" its ip address
-              this.trackerIp = node.instance.PublicIpAddress;
+                if (code === 0) {
+                  // Everything ok
+                  if (node.tracker) { // When tracker is running, "publish" its ip address
+                    this.trackerIp = node.instance.PublicIpAddress;
+                  }
+                  // Update status
+                  this.nodes[node.instance.InstanceId].projectStartedPending = false;
+                  this.nodes[node.instance.InstanceId].projectStarted = true;
+                  resolve();
+                } else {
+                  this.nodes[node.instance.InstanceId].projectStartedPending = false;
+                  reject(err);
+                }
+                return (code === 0) ? resolve() : reject('Fail to start project');
+              }).on('data', data => {
+                console.log(chalk.blue(`> ${AwsCloud.ec2NodeString(node)} STDOUT: ${data}`));
+              }).stderr.on('data', data => {
+                console.log(chalk.red(`> ${AwsCloud.ec2NodeString(node)} STDERR: ${data}`));
+              });
             }
-            // Update status
-            this.nodes[node.instance.InstanceId].projectStartedPending = false;
-            this.nodes[node.instance.InstanceId].projectStarted = true;
-            resolve();
-          } catch (err) {
-            this.nodes[node.instance.InstanceId].projectStartedPending = false;
-            reject(err);
-          }
+          });
         }).connect({
           host: node.instance.PublicIpAddress,
           port: 22,
@@ -417,21 +436,20 @@ export class AwsCloud implements Cloud {
    * Start a timeout after which the script will try to deploy the project on the machines.
    *
    * @param timeout Time
+   * @param resolve Resolve
    * @return {Promise<void>}
    */
-  private startDeployTimeout(timeout: number): Promise<void> {
-    return new Promise((resolve) => {
-      // Limit timeout
-      timeout = timeout > 10000 ? timeout : 10000;
-      timeout = timeout < 120000 ? timeout : 120000;
-      console.log(chalk.yellow(`> Wait ${timeout / 1000} sec before deploy...`));
+  private startDeployTimeout(timeout: number, resolve: () => void): void {
+    // Limit timeout
+    // timeout = timeout > 10000 ? timeout : 10000;
+    timeout = timeout < 120000 ? timeout : 120000;
+    console.log(chalk.yellow(`> Wait ${timeout / 1000} sec before try deploy...`));
 
-      // Set timeout
-      setTimeout(async () => {
-        console.log(chalk.yellow(`> Try to deploy...`));
+    // Set timeout
+    setTimeout(async () => {
+      console.log(chalk.yellow(`> Try to deploy...`));
 
-        const promises = [];
-
+      try {
         for (let instanceId in this.nodes) {
           // Check if node is running
           const running = await this.isMachineRunning(this.nodes[instanceId]);
@@ -439,26 +457,31 @@ export class AwsCloud implements Cloud {
             // Update instance info (get ip address)
             this.nodes[instanceId].instance = await this.getInstance(this.nodes[instanceId]);
             // try to deploy
-            promises.push(this.tryDeploy(this.nodes[instanceId]));
+            this.tryDeploy(this.nodes[instanceId])
+              .then(() => {
+                if (isObjectEmpty(this.nodes)) { // Ok, all nodes deployed
+                  return resolve();
+                } else { // Some nodes still need to be deployed
+                  if (this.nodes[instanceId].tracker) {
+                    // Trigger immediately a new timeout
+                    this.startDeployTimeout(300, resolve);
+                  }
+                }
+              })
+              .catch(err => {
+                console.log(chalk.magenta('> Timeout report:'), err);
+              });
           }
         }
 
-        try {
-          // Wait for all node to send a response
-          const result = await Promise.all(promises);
-          // All running nodes deployed successfully -> check how many nodes remains
-          if (isObjectEmpty(this.nodes)) { // Ok, all nodes deployed
-            return resolve();
-          } else { // Some nodes still need to be deployed -> retry timeout
-            console.log(chalk.yellow(`> Timeout round completed but some node is still not running`), result);
-            return resolve(await this.startDeployTimeout(timeout + 20000));
-          }
-        } catch (err) { // Some node fail the deploy -> set a new timeout
-          console.log(chalk.yellow(`> Timeout round completed but some node fail`), err);
-          return resolve(await this.startDeployTimeout(timeout + 20000));
-        }
-      }, timeout);
-    });
+      } catch (err) {
+        console.log(chalk.bgBlue('An machine fail the deploy. '), err);
+      }
+
+      console.log(chalk.bold.blue('Setting next timeout in ' + ((timeout + 20000) / 100) + ' sec...'));
+      // Set next timeout
+      this.startDeployTimeout(timeout + 20000, resolve);
+    }, timeout);
   }
 
   /**
@@ -470,6 +493,9 @@ export class AwsCloud implements Cloud {
   private async tryDeploy(node: EC2Machine): Promise<void> {
     // Copy project
     await this.copyProject(node);
+    // Install Java
+    await this.installJava(node);
+
     // Check if tracker bootstrapped
     if (!node.tracker && !this.trackerIp) { // Must wait for tracker bootstrap
       throw AwsCloud.ec2NodeString(node) + ' Tracker not yet bootstrapped';
@@ -512,60 +538,53 @@ export class AwsCloud implements Cloud {
 
   /**
    * Install Java on a machine.
-   * @param sshConnection ssh connection.
    * @param node Node.
    * @return {Promise<void>}
    */
-  private async installJava(sshConnection: Client, node: EC2Machine): Promise<void> {
-    console.log(chalk.blue(`> Install Java on machine ${AwsCloud.ec2NodeString(node)}...`));
-    await new Promise((resolve, reject) => {
-      sshConnection.exec('sudo apt-get update && sudo apt-get -y install openjdk-8-jre', (err, stream) => {
-        if (err) {
-          reject(err);
-        } else {
-          stream.on('close', code => {
-            const chalkColor = code === 0 ? chalk.green : chalk.red;
-            console.log(chalkColor(`> Machine ${AwsCloud.ec2NodeString(node)}. Java install result code ${code}`));
-            return (code === 0) ? resolve() : reject('Java installation failed');
-          }).on('data', data => {
-            console.log(chalk.blue(`> ${AwsCloud.ec2NodeString(node)} STDOUT: ${data}`));
-          }).stderr.on('data', data => {
-            console.log(chalk.red(`> ${AwsCloud.ec2NodeString(node)} STDERR: ${data}`));
+  private async installJava(node: EC2Machine): Promise<void> {
+    if (node.installJavaComplete) {
+      return;
+    } else if (node.installJavaPending) {
+      throw AwsCloud.ec2NodeString(node) + ' Java installation pending...';
+    } else {
+      try {
+        this.nodes[node.instance.InstanceId].installJavaPending = true;
+        console.log(chalk.blue(`> Install Java on machine ${AwsCloud.ec2NodeString(node)}...`));
+        await new Promise((resolve, reject) => {
+          const sshConnection = new ssh2.Client();
+          sshConnection.on('ready', async () => {
+            console.log(chalk.green(`> SSH connection with "${AwsCloud.ec2NodeString(node)}" established. Install Java...`));
+            sshConnection.exec('sudo apt-get update && sudo apt-get -y install openjdk-8-jre', (err, stream) => {
+              if (err) {
+                reject(err);
+              } else {
+                stream.on('close', code => {
+                  const chalkColor = code === 0 ? chalk.green : chalk.red;
+                  console.log(chalkColor(`> Machine ${AwsCloud.ec2NodeString(node)}. Java install result code ${code}`));
+                  this.nodes[node.instance.InstanceId].installJavaComplete = true;
+                  this.nodes[node.instance.InstanceId].installJavaPending = false;
+                  sshConnection.end();
+                  return (code === 0) ? resolve() : reject('Java installation failed');
+                }).on('data', () => {
+                  // console.log(chalk.blue(`> ${AwsCloud.ec2NodeString(node)} STDOUT: ${data}`));
+                }).stderr.on('data', () => {
+                  // console.log(chalk.red(`> ${AwsCloud.ec2NodeString(node)} STDERR: ${data}`));
+                });
+              }
+            });
+          }).connect({
+            host: node.instance.PublicIpAddress,
+            port: 22,
+            username: AwsCloud.EC2_INSTANCE_USERNAME,
+            privateKey: fs.readFileSync(path.resolve(this.options.sshKey)),
+            passphrase: this.options.sshPassphrase ? this.options.sshPassphrase : undefined
           });
-        }
-      });
-    });
-  }
-
-  /**
-   * Run project.
-   * @param sshConnection ssh connection.
-   * @param node Node.
-   * @return {Promise<void>}
-   */
-  private async sshRunProject(sshConnection: Client, node: EC2Machine): Promise<void> {
-
-    console.log(chalk.blue(`> Run projct on machine ${AwsCloud.ec2NodeString(node)}...`));
-    await new Promise((resolve, reject) => {
-      const cmd = this.getStartProjectCmd(node.id, this.options, node.instance.PublicIpAddress, node.tracker);
-
-      sshConnection.exec(cmd, (err, stream) => {
-        if (err) {
-          reject(err);
-        } else {
-          stream.on('close', code => {
-            const chalkColor = code === 0 ? chalk.green : chalk.red;
-            console.log(chalkColor(`> Start project on ${AwsCloud.ec2NodeString(node)} closed with code ${code}`));
-            sshConnection.end();
-            return (code === 0) ? resolve() : reject('Fail to start project');
-          }).on('data', data => {
-            console.log(chalk.blue(`> ${AwsCloud.ec2NodeString(node)} STDOUT: ${data}`));
-          }).stderr.on('data', data => {
-            console.log(chalk.red(`> ${AwsCloud.ec2NodeString(node)} STDERR: ${data}`));
-          });
-        }
-      });
-    });
+        });
+      } catch (err) {
+        this.nodes[node.instance.InstanceId].installJavaPending = false;
+        console.log(chalk.red(`> Machine ${AwsCloud.ec2NodeString(node)}. Fail while install Java `), err);
+      }
+    }
   }
 
   private async downloadStuff(ip: string, src: string, dest: string) {
