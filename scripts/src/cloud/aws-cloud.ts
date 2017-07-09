@@ -108,27 +108,31 @@ export class AwsCloud implements Cloud {
       // Fetch AWS regions
       await this.init();
 
-      // Create instances (both tracker and nodes)
-      const promises = Array.from(Array(this.options.nodes + 1).keys()).map(id => {
-        const region = this.getRandomRegion();
-        const tracker = (id == 0);
-        return this.createEC2Instance(id, region, tracker).then(instance => {
-          return {
-            instance: instance,
-            region: region,
-            id: id,
-            tracker: tracker
-          }
-        });
-      });
-      const nodes = await Promise.all(promises);
-      nodes.forEach(node => this.nodes[node.instance.InstanceId] = node);
+      // Create tracker
+      let reg = this.getRandomRegion();
+      const trackerInstance = await this.createEC2Instance(0, reg, true);
+      this.nodes[trackerInstance.InstanceId] = {
+        instance: trackerInstance,
+        region: reg,
+        tracker: true,
+        id: 0
+      };
+
+      // Create nodes
+      for (let i = 1; i <= this.options.nodes; i++) {
+        reg = this.getRandomRegion();
+        const trackerInstance = await this.createEC2Instance(i, reg);
+        this.nodes[trackerInstance.InstanceId] = {
+          instance: trackerInstance,
+          region: reg,
+          id: i
+        };
+      }
 
       // Deploy project on machines and start it
       await new Promise((resolve) => {
         this.startDeployTimeout(30000, resolve);
       });
-
       console.log(chalk.bold.green('> Experiment started successfully. Nodes:'), this.deployedNodes.map(n => {
         //noinspection PointlessBooleanExpressionJS
         return {
@@ -654,7 +658,7 @@ export class AwsCloud implements Cloud {
         (options.repetitions ? `REPETITIONS=${options.repetitions} ` : ``) +
         (options.initialSeed ? `INITIAL_SEED=${options.initialSeed} ` : ``) +
         (options.reportPath ? `REPORT_PATH=${options.reportPath} ` : ``) +
-        `java -jar ${ProjectUtils.JAR_NAME} tracker | tee >(cat > ${ProjectUtils.EC2_LOG_PATH}) &`;
+        `java -jar ${ProjectUtils.JAR_NAME} tracker > ${ProjectUtils.EC2_LOG_PATH} &`;
     } else {
       return `HOST=${myIp} PORT=${10000 + id} ID=${id} java -jar ${ProjectUtils.JAR_NAME} node ${this.trackerIp} 10000 > ${ProjectUtils.EC2_LOG_PATH} &`;
     }
