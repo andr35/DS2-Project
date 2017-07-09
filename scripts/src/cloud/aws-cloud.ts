@@ -188,9 +188,9 @@ export class AwsCloud implements Cloud {
         process.exit(-1);
       } else {
 
-        console.log(chalk.yellow('Trying to download report...'));
+        console.log(chalk.yellow('> Trying to download report...'));
         await this.downloadDir(trackerInstance.PublicIpAddress, this.options.reportDir, this.options.downloadDir);
-        console.log(chalk.yellow('Trying to download tracker log...'));
+        console.log(chalk.yellow('> Trying to download tracker log...'));
         await this.downloadStuff(trackerInstance.PublicIpAddress, ProjectUtils.EC2_LOG_PATH, this.options.downloadDir);
         console.log(chalk.bold.green(`> Complete! Files downloaded in ${this.options.downloadDir}`));
       }
@@ -357,7 +357,6 @@ export class AwsCloud implements Cloud {
             path: AwsCloud.EC2_INSTANCE_BASE_PATH
           }, err => err ? reject(err) : resolve());
         });
-        console.log(chalk.green(`> Copied project in node ${AwsCloud.ec2NodeString(node)}`));
         // Update node status
         this.nodes[node.instance.InstanceId].projectCopied = true;
         this.nodes[node.instance.InstanceId].projectCopiedPending = false;
@@ -460,11 +459,11 @@ export class AwsCloud implements Cloud {
             this.nodes[instanceId].instance = await this.getInstance(this.nodes[instanceId]);
             // try to deploy
             this.tryDeploy(this.nodes[instanceId])
-              .then(() => {
+              .then(machine => {
                 if (isObjectEmpty(this.nodes)) { // Ok, all nodes deployed
                   return resolve();
                 } else { // Some nodes still need to be deployed
-                  if (this.nodes[instanceId].tracker) {
+                  if (machine.tracker) {
                     // Trigger immediately a new timeout
                     this.startDeployTimeout(300, resolve);
                   }
@@ -476,10 +475,10 @@ export class AwsCloud implements Cloud {
           }
         }
       } catch (err) {
-        console.log(chalk.bgBlue('An machine fail the deploy. '), err);
+        console.log(chalk.bgBlue('> A machine fail the deploy. '), err);
       }
 
-      console.log(chalk.bold.blue('Setting next timeout in ' + ((timeout + 20000) / 100) + ' sec...'));
+      console.log(chalk.bold.blue('> Setting next timeout in ' + ((timeout + 20000) / 1000) + ' sec...'));
       // Set next timeout
       this.startDeployTimeout(timeout + 20000, resolve);
     }, timeout);
@@ -491,7 +490,7 @@ export class AwsCloud implements Cloud {
    * @param node Node
    * @return {Promise<null>}
    */
-  private async tryDeploy(node: EC2Machine): Promise<void> {
+  private async tryDeploy(node: EC2Machine): Promise<EC2Machine> {
     // Copy project
     await this.copyProject(node);
     // Install Java
@@ -502,13 +501,13 @@ export class AwsCloud implements Cloud {
       throw AwsCloud.ec2NodeString(node) + ' Tracker not yet bootstrapped';
     } else {
       // Try to start project
-      await this.startProjectInInstance(node);
+     await this.startProjectInInstance(node);
 
       // Success
       this.deployedNodes.push(node);
       delete this.nodes[node.instance.InstanceId];
       console.log(chalk.bold.green(`> Instance ${AwsCloud.ec2NodeString(node)} deploy completed`));
-      return null;
+      return node;
     }
   }
 
@@ -552,11 +551,11 @@ export class AwsCloud implements Cloud {
     } else {
       try {
         this.nodes[node.instance.InstanceId].installJavaPending = true;
-        console.log(chalk.blue(`> Install Java on machine ${AwsCloud.ec2NodeString(node)}...`));
+        console.log(chalk.blue(`> Try to install Java on machine ${AwsCloud.ec2NodeString(node)}...`));
         await new Promise((resolve, reject) => {
           const sshConnection = new ssh2.Client();
           sshConnection.on('ready', async () => {
-            console.log(chalk.green(`> SSH connection with "${AwsCloud.ec2NodeString(node)}" established. Install Java...`));
+            console.log(chalk.green(`> SSH connection with "${AwsCloud.ec2NodeString(node)}" established. Installing Java...`));
             sshConnection.exec('sudo apt-get update && sudo apt-get -y install openjdk-8-jre', (err, stream) => {
               if (err) {
                 reject(err);
@@ -603,8 +602,6 @@ export class AwsCloud implements Cloud {
   }
 
   private async downloadDir(ip: string, src: string, dest: string) {
-    const cmd = `-i ${path.resolve(this.options.sshKey)} -r ${AwsCloud.EC2_INSTANCE_USERNAME}@${ip}:${src} ${path.resolve(dest)}`;
-    console.log('cMD', cmd);
     await new Promise((resolve, reject) => {
       const scpCmd = spawn('scp', ['-i', path.resolve(this.options.sshKey), '-r', AwsCloud.EC2_INSTANCE_USERNAME + '@' + ip + ':' + src, path.resolve(dest)]);
 

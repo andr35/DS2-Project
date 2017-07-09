@@ -219,7 +219,7 @@ export class Script {
     }
     if (!options.reportDir) {
       const repDir = '/tmp/gossip-style-failure-detector';
-      console.log(chalk.yellow('No report directory provided with "--report-dir" option. Use default ' + repDir));
+      console.log(chalk.yellow('i No report directory provided with "--report-dir" option. Use default ' + repDir));
       options.reportDir = repDir;
     }
   }
