@@ -25,8 +25,11 @@ public final class StartExperiment implements Serializable {
 	 * @return StartExperiment message.
 	 */
 	public static StartExperiment normal(boolean pullByGossip, @NotNull Collection<ActorRef> nodes,
-										 long gossipTime, long failTime, double multicastParam, int multicastMaxWait) {
-		return new StartExperiment(pullByGossip, null, nodes, gossipTime, failTime, multicastParam, multicastMaxWait);
+										 long gossipTime, long failTime,
+										 double multicastParam, int multicastMaxWait,
+										 int pickStrategy) {
+		return new StartExperiment(pullByGossip, null, nodes, gossipTime, failTime,
+			multicastParam, multicastMaxWait, pickStrategy);
 	}
 
 	/**
@@ -38,8 +41,11 @@ public final class StartExperiment implements Serializable {
 	 * @return StartExperiment message.
 	 */
 	public static StartExperiment crash(boolean pullByGossip, long delta, @NotNull Collection<ActorRef> nodes,
-										long gossipTime, long failTime, double multicastParam, int multicastMaxWait) {
-		return new StartExperiment(pullByGossip, delta, nodes, gossipTime, failTime, multicastParam, multicastMaxWait);
+										long gossipTime, long failTime,
+										double multicastParam, int multicastMaxWait,
+										int pickStrategy) {
+		return new StartExperiment(pullByGossip, delta, nodes, gossipTime, failTime,
+			multicastParam, multicastMaxWait, pickStrategy);
 	}
 
 	// gossip strategy to use: pull vs push-pull
@@ -51,6 +57,7 @@ public final class StartExperiment implements Serializable {
 	private final long failTime;
 	private final double multicastParam;
 	private final int multicastMaxWait;
+	private final int pickStrategy;
 	private final List<ActorRef> nodes;
 
 	/**
@@ -62,7 +69,10 @@ public final class StartExperiment implements Serializable {
 	 * @param nodes List of nodes in the system.
 	 */
 	private StartExperiment(boolean pullByGossip, @Nullable Long delta, @NotNull Collection<ActorRef> nodes,
-							long gossipTime, long failTime, double multicastParam, int multicastMaxWait) {
+							long gossipTime, long failTime,
+							double multicastParam, int multicastMaxWait,
+							int pickStrategy) {
+
 		this.pullByGossip = pullByGossip;
 		this.delta = delta;
 		this.nodes = Collections.unmodifiableList(new ArrayList<>(nodes));
@@ -70,6 +80,7 @@ public final class StartExperiment implements Serializable {
 		this.failTime = failTime;
 		this.multicastParam = multicastParam;
 		this.multicastMaxWait = multicastMaxWait;
+		this.pickStrategy = pickStrategy;
 	}
 
 	public boolean isPullByGossip() {
@@ -99,6 +110,10 @@ public final class StartExperiment implements Serializable {
 
 	public int getMulticastMaxWait() {
 		return multicastMaxWait;
+	}
+
+	public int getPickStrategy() {
+		return pickStrategy;
 	}
 
 	/**

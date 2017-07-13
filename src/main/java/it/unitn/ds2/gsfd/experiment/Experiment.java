@@ -36,15 +36,15 @@ public final class Experiment {
 			.boxed()
 			.map(permutation::get)
 			.map(node -> new ExpectedCrash((long) random.nextInt(duration / 2), node))  // TODO: remove /2
-			// TODO: crash within duration - failureDelta?
+			// TODO: crash WELL before duration - failureDelta?
 			.collect(Collectors.toList());
 
 		// return the experiment
 		final String id = String.format("nodes-%d__pushpull-%b__duration-%d__seed-%d__repetition-%d",
 			numberOfNodes, pullByGossip, duration, seed, repetition);
 		return new Experiment(id, numberOfNodes, pullByGossip, duration, expectedCrashes,
-			500, 6000, 3, 10);
-		// TODO: proper input of gossipDelta, failureDelta, multicastParameter and multicastMaxWaitDelta
+			500, 6000, 3, 10, 0);
+		// TODO: proper input of gossipDelta, failureDelta, multicastParam, multicastMaxWait and pickStrategy
 		// TODO: multicastParameter should be based on the number of nodes
 	}
 
@@ -73,10 +73,13 @@ public final class Experiment {
 	private final long failureDelta;
 
 	// parameter "a" of probability of multicast (catastrophe recovery)
-	private final double multicastParameter;
+	private final double multicastParam;
 
 	// maximum number of times a multicast can be postponed
-	private final int multicastMaxWaitDelta;
+	private final int multicastMaxWait;
+
+	// indicates what probability distribution is used when choosing random nodes
+	private final int pickStrategy;
 
 	// start time of the experiment
 	private Long start;
@@ -85,8 +88,10 @@ public final class Experiment {
 	private Long stop;
 
 	// initialize a new experiment
-	private Experiment(String id, int numberOfNodes, boolean pushPull, int duration, List<ExpectedCrash> expectedCrashes,
-					   long gossipDelta, long failureDelta, double multicastParameter, int multicastMaxWaitDelta) {
+	private Experiment(String id, int numberOfNodes, boolean pushPull,
+					   int duration, List<ExpectedCrash> expectedCrashes, long gossipDelta, long failureDelta,
+					   double multicastParam, int multicastMaxWait,
+					   int pickStrategy) {
 		this.id = id;
 		this.numberOfNodes = numberOfNodes;
 		this.pushPull = pushPull;
@@ -95,8 +100,9 @@ public final class Experiment {
 		this.reportedCrashed = new LinkedList<>();
 		this.gossipDelta = gossipDelta;
 		this.failureDelta = failureDelta;
-		this.multicastParameter = multicastParameter;
-		this.multicastMaxWaitDelta = multicastMaxWaitDelta;
+		this.multicastParam = multicastParam;
+		this.multicastMaxWait = multicastMaxWait;
+		this.pickStrategy = pickStrategy;
 		this.start = null;
 		this.stop = null;
 	}
@@ -121,12 +127,16 @@ public final class Experiment {
 		return failureDelta;
 	}
 
-	public double getMulticastParameter() {
-		return multicastParameter;
+	public double getMulticastParam() {
+		return multicastParam;
 	}
 
-	public int getMulticastMaxWaitDelta() {
-		return multicastMaxWaitDelta;
+	public int getMulticastMaxWait() {
+		return multicastMaxWait;
+	}
+
+	public int getPickStrategy() {
+		return pickStrategy;
 	}
 
 	public void start() {
@@ -192,8 +202,8 @@ public final class Experiment {
 				.add("push_pull", pushPull)
 				.add("gossip_delta", gossipDelta)
 				.add("failure_delta", failureDelta)
-				.add("multicast_parameter", multicastParameter)
-				.add("multicast_max_wait_delta", multicastMaxWaitDelta)
+				.add("multicast_parameter", multicastParam)
+				.add("multicast_max_wait", multicastMaxWait)
 			)
 			.add("result", Json.createObjectBuilder()
 				.add("start_time", start)

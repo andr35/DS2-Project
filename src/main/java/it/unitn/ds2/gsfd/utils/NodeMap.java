@@ -54,22 +54,45 @@ public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 		return result.toString() + "}";
 	}
 
+	/**
+	 * Randomly selects one node among those that are correct.
+	 *
+	 * @param strategy indicates how the random node should be
+	 *                 chosen.
+	 *                 0: uniform random;
+	 *                 1: based on quiescence;
+	 *                 2: based on quiescence, squared.
+	 * @return Akka's ActorRef of the chosen node.
+	 */
 	@Nullable
-	public ActorRef pickNode() {
+	public ActorRef pickNode(int strategy) {
 
 		if (correctNodes.isEmpty()) return null;
+
+		if (strategy < 0 || strategy > 2) {
+			throw new java.lang.RuntimeException("pickNode strategy unexpected (" + strategy + ")");
+		}
+
+		// with strategy 0 all nodes have the same probability
+		// we can directly return a random node
+		if (strategy == 0) {
+			Random r = new Random();
+			int randomIndex = r.nextInt(correctNodes.size());
+			return correctNodes.get(randomIndex);
+		}
 
 		List<ActorRef> candidates = new ArrayList<>(keySet());
 		candidates.retainAll(correctNodes);
 
 		// compute in advance a score for each node (will alter probability of it being chosen).
-		// function: "sorted.get(candidates.get(i)).getQuiescence() + 1"
 		// the +1 guarantees every node has a chance to be chosen
-		// other examples: "sorted.size() - i + 1" (only based on ranking), "1" (uniform random)
 		// TODO: more complex function (possibly by experiment setting)
 		List<Long> nodeScores = new ArrayList<>();
 		for (int i = 0; i < candidates.size(); i++) {
-			nodeScores.add(i, get(candidates.get(i)).getQuiescence() + 1);
+			if (strategy == 1)
+				nodeScores.add(i, get(candidates.get(i)).getQuiescence() + 1);
+			else if (strategy == 2)
+				nodeScores.add(i, (long) Math.pow(get(candidates.get(i)).getQuiescence(), 2) + 1);
 		}
 
 		// generate a random number whose value ranges from 0.0 to the sum

@@ -85,6 +85,9 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	// if true, the node replies to the gossip sender
 	private boolean pullByGossip;
 
+	// tells what strategy to use when choosing a (random) node to gossip (see NodeMap's pickNode)
+	private int pickStrategy;
+
 	// log, used for debug proposes
 	private final DiagnosticLoggingAdapter log;
 
@@ -109,7 +112,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		this.log = Logging.getLogger(this);
 		this.log.setMDC(mdc);
 
-		// messages to accept in the NOT_READY state (before an experiment)
+		// messages to accept in the NOT_READY state
+		// (before an experiment or while a crash is simulated)
 		notReady = receiveBuilder()
 			.match(Shutdown.class, msg -> onShutdown())
 			.match(StartExperiment.class, this::onStart)
@@ -195,6 +199,9 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		// schedule reminder to perform first Gossip
 		gossipTimeout = sendToSelf(new GossipReminder(), gossipTime);
 
+		// set strategy for gossip's random node choice
+		pickStrategy = msg.getPickStrategy();
+
 		// setup for catastrophe recovery
 		multicastParam = msg.getMulticastParam();
 		multicastMaxWait = msg.getMulticastMaxWait();
@@ -204,6 +211,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		multicastTimeout = sendToSelf(new CatastropheReminder(), 1000);
 
 		// debug
+		log.debug("pick strategy: " + pickStrategy);
 		if (delta != null) log.info("onStart complete (faulty, crashes in " + msg.getDelta() + ")");
 		else log.info("onStart complete (correct)");
 		log.debug("nodes: " + nodes.beatsToString());
@@ -232,7 +240,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 		// TODO: check that this works with the experiments
 		// pick random correct node
-		ActorRef gossipNode = nodes.pickNode();
+		ActorRef gossipNode = nodes.pickNode(pickStrategy);
 		if (gossipNode != null) {
 
 			// gossip the beats to the random node
@@ -263,6 +271,12 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		}
 	}
 
+	/**
+	 * This method is called to handle a gossip reply.
+	 * Used only if push-pull strategy is active (pullByGossip).
+	 *
+	 * @param msg Gossip-type message (heartbeats).
+	 */
 	private void onGossipReply(GossipReply msg) {
 		updateBeats(msg.getBeats());
 		log.debug("gossiped (reply) by {}", idFromRef(getSender()));
@@ -294,6 +308,12 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		nodes.get(failing).resetTimeout(sendToSelf(cleanMsg, cleanupTime));
 	}
 
+	/**
+	 * This method is called when cleanup timeout is expired for a node
+	 * after it is believed to have crashed. This is a self-message.
+	 *
+	 * @param msg Details with the node that is to be completely removed.
+	 */
 	private void onCleanup(Cleanup msg) {
 		ActorRef failed = msg.getFailed();
 		long cleanId = msg.getCleanId();
