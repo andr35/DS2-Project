@@ -218,9 +218,9 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		nodes.forEach(node -> {
 			final String id = idFromRef(node);
 			if (crashesByNode.containsKey(id)) {
-				node.tell(StartExperiment.crash(current.isPushPull(), crashesByNode.get(id), nodes, gossipTime, failTime, multicastParam, multicastMaxWait, pickStrategy), getSelf());
+				node.tell(StartExperiment.crash(current.isPushPull(), crashesByNode.get(id), nodes, gossipTime, failTime, current.isMulticastActive(), multicastParam, multicastMaxWait, pickStrategy), getSelf());
 			} else {
-				node.tell(StartExperiment.normal(current.isPushPull(), nodes, gossipTime, failTime, multicastParam, multicastMaxWait, pickStrategy), getSelf());
+				node.tell(StartExperiment.normal(current.isPushPull(), nodes, gossipTime, failTime, current.isMulticastActive(), multicastParam, multicastMaxWait, pickStrategy), getSelf());
 			}
 		});
 

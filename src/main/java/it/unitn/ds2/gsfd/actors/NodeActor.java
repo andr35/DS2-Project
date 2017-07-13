@@ -70,6 +70,9 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	private long gossipTime;
 	private Cancellable gossipTimeout;
 
+	// if true, may perform multicast
+	private boolean multicastActive;
+
 	// parameter used to decide if the node will multicast
 	private double multicastParam;
 
@@ -134,6 +137,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			.match(Cleanup.class, this::onCleanup)
 			.match(CatastropheReminder.class, msg -> sendMulticast())
 			.match(CatastropheMulticast.class, this::onMulticast)
+			.match(CatastropheReply.class, this::onMulticastReply)
 			.matchAny(msg -> log.error("Received unknown message -> " + msg))
 			.build();
 
@@ -203,15 +207,21 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		pickStrategy = msg.getPickStrategy();
 
 		// setup for catastrophe recovery
-		multicastParam = msg.getMulticastParam();
-		multicastMaxWait = msg.getMulticastMaxWait();
-		multicastWait = 0;
+		multicastActive = msg.isMulticastActive();
+		if (multicastActive) {
+			log.info("multicast is active");
+			multicastParam = msg.getMulticastParam();
+			multicastMaxWait = msg.getMulticastMaxWait();
+			multicastWait = 0;
 
-		// schedule reminder to attempt multicast
-		multicastTimeout = sendToSelf(new CatastropheReminder(), 1000);
+			// schedule reminder to attempt multicast
+			multicastTimeout = sendToSelf(new CatastropheReminder(), 1000);
+		} else {
+			log.info("multicast is not active");
+		}
 
 		// debug
-		log.debug("pick strategy: " + pickStrategy);
+		log.info("pick strategy: " + pickStrategy);
 		if (delta != null) log.info("onStart complete (faulty, crashes in " + msg.getDelta() + ")");
 		else log.info("onStart complete (correct)");
 		log.debug("nodes: " + nodes.beatsToString());
@@ -245,7 +255,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 			// gossip the beats to the random node
 			gossipNode.tell(new Gossip(nodes.getBeats()), getSelf());
-			log.debug("gossiped to {}: " + nodes.beatsToString(), idFromRef(gossipNode));
+			log.debug("gossip to {}: " + nodes.beatsToString(), idFromRef(gossipNode));
 
 			// lower the probability of gossiping the same node soon
 			nodes.get(gossipNode).resetQuiescence();
@@ -259,7 +269,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	}
 
 	private void onGossip(Gossip msg) {
-		log.debug("gossiped by {}, beats={}, push_pull={}", idFromRef(getSender()), nodes.beatsToString(), pullByGossip);
+		log.debug("gossip from {}, beats={}, push_pull={}", idFromRef(getSender()), nodes.beatsToString(), pullByGossip);
 
 		// this method update both the beats for all nodes and resets the quiescence for any updated
 		updateBeats(msg.getBeats());
@@ -279,7 +289,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	 */
 	private void onGossipReply(GossipReply msg) {
 		updateBeats(msg.getBeats());
-		log.debug("gossiped (reply) by {}", idFromRef(getSender()));
+		log.debug("gossip (reply) from {}", idFromRef(getSender()));
 	}
 
 	/**
@@ -354,11 +364,23 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	 * This method is called when this node receive a message that was
 	 * sent in multicast to all nodes.
 	 *
-	 * @param msg Message.
+	 * @param msg Message with nodes beats.
 	 */
 	private void onMulticast(CatastropheMulticast msg) {
 		multicastWait = 0;
 		updateBeats(msg.getBeats());
+
+		// send back node's heartbeats to multicast originator
+		// this is always done regardless of push-pull option
+		reply(new CatastropheReply(nodes.getBeats()));
+		log.debug("multicast from {}, beats={}", idFromRef(getSender()), nodes.beatsToString());
+	}
+
+	private void onMulticastReply(CatastropheReply msg) {
+		updateBeats(msg.getBeats());
+
+		// debug
+		log.debug("multicast (reply) from {}", idFromRef(getSender()));
 	}
 
 	private void updateBeats(Map<ActorRef, Long> gossipedBeats) {
