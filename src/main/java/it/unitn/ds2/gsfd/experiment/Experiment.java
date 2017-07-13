@@ -35,7 +35,7 @@ public final class Experiment {
 		final List<ExpectedCrash> expectedCrashes = IntStream.of(crashes)
 			.boxed()
 			.map(permutation::get)
-			.map(node -> new ExpectedCrash((long) random.nextInt(duration / 2), node))  // TODO: remove /2
+			.map(node -> new ExpectedCrash((long) random.nextInt(duration / 3), node))  // TODO: remove /3
 			// TODO: crash WELL before duration - failureDelta?
 			.collect(Collectors.toList());
 
@@ -44,8 +44,8 @@ public final class Experiment {
 			numberOfNodes, pullByGossip, duration, seed, repetition);
 		return new Experiment(id, numberOfNodes, pullByGossip, duration, expectedCrashes,
 			500, 6000,
-			true, 3, 10, 0);
-		// TODO: proper input of gossipDelta, failureDelta, multicastActive, multicastParam, multicastMaxWait and pickStrategy
+			true, 2, 10, 1);
+		// TODO: proper input of gossipDelta, failureDelta, catastrophe, multicastParam, multicastMaxWait and pickStrategy
 	}
 
 	// unique identifier for the experiment
@@ -73,7 +73,7 @@ public final class Experiment {
 	private final long failureDelta;
 
 	// if true, multicast will be periodically issued
-	private final boolean multicastActive;
+	private final boolean catastrophe;
 
 	// parameter "a" of probability of multicast (catastrophe recovery)
 	private final double multicastParam;
@@ -93,7 +93,7 @@ public final class Experiment {
 	// initialize a new experiment
 	private Experiment(String id, int numberOfNodes, boolean pushPull,
 					   int duration, List<ExpectedCrash> expectedCrashes, long gossipDelta, long failureDelta,
-					   boolean multicastActive, double multicastParam, int multicastMaxWait,
+					   boolean catastrophe, double multicastParam, int multicastMaxWait,
 					   int pickStrategy) {
 		this.id = id;
 		this.numberOfNodes = numberOfNodes;
@@ -103,7 +103,7 @@ public final class Experiment {
 		this.reportedCrashed = new LinkedList<>();
 		this.gossipDelta = gossipDelta;
 		this.failureDelta = failureDelta;
-		this.multicastActive = multicastActive;
+		this.catastrophe = catastrophe;
 		this.multicastParam = multicastParam;
 		this.multicastMaxWait = multicastMaxWait;
 		this.pickStrategy = pickStrategy;
@@ -131,8 +131,8 @@ public final class Experiment {
 		return failureDelta;
 	}
 
-	public boolean isMulticastActive() {
-		return multicastActive;
+	public boolean iscatastrophe() {
+		return catastrophe;
 	}
 
 	public double getMulticastParam() {

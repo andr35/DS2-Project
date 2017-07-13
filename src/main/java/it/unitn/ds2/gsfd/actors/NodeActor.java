@@ -70,8 +70,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	private long gossipTime;
 	private Cancellable gossipTimeout;
 
-	// if true, may perform multicast
-	private boolean multicastActive;
+	// if true, activates countermeasures for catastrophe
+	private boolean catastrophe;
 
 	// parameter used to decide if the node will multicast
 	private double multicastParam;
@@ -84,6 +84,9 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 	// timeout to issue another try for multicast
 	private Cancellable multicastTimeout;
+
+	// grace time, in catastrophic events, to decide if the node has really crashed
+	private long missTime;
 
 	// if true, the node replies to the gossip sender
 	private boolean pullByGossip;
@@ -134,6 +137,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			.match(Gossip.class, this::onGossip)
 			.match(GossipReply.class, this::onGossipReply)
 			.match(Fail.class, this::onFail)
+			.match(Miss.class, this::onMiss)
 			.match(Cleanup.class, this::onCleanup)
 			.match(CatastropheReminder.class, msg -> sendMulticast())
 			.match(CatastropheMulticast.class, this::onMulticast)
@@ -207,12 +211,13 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		pickStrategy = msg.getPickStrategy();
 
 		// setup for catastrophe recovery
-		multicastActive = msg.isMulticastActive();
-		if (multicastActive) {
+		catastrophe = msg.isCatastrophe();
+		if (catastrophe) {
 			log.info("multicast is active");
 			multicastParam = msg.getMulticastParam();
 			multicastMaxWait = msg.getMulticastMaxWait();
 			multicastWait = 0;
+			missTime = failTime; // TODO: how to compute missTime?
 
 			// schedule reminder to attempt multicast
 			multicastTimeout = sendToSelf(new CatastropheReminder(), 1000);
@@ -304,18 +309,50 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 		// check if the Fail message was still valid
 		if (nodes.get(failing).getTimeoutId() == failId) {
-			// remove from correct nodes and report to Tracker
-			nodes.setFailed(failing);
-			sendToTracker(new CrashReport(failing));
-			log.info("Node {} reported as failed", idFromRef(failing));
+			if (catastrophe) {
+
+				// stop gossiping the suspected node
+				nodes.setMissing(failing);
+
+				// give the system more time to decide if the node is failed
+				Miss missMsg = new Miss(failing, nodes.get(failing).getTimeoutId() + 1);
+				nodes.get(failing).resetTimeout(sendToSelf(missMsg, missTime));
+				log.info("Node {} is missing", idFromRef(failing));
+			} else {
+
+				// remove from correct nodes and report to Tracker
+				nodes.setFailed(failing);
+				sendToTracker(new CrashReport(failing));
+
+				// schedule message to remove the node from the heartbeat map
+				Cleanup cleanMsg = new Cleanup(failing, nodes.get(failing).getTimeoutId() + 1);
+				nodes.get(failing).resetTimeout(sendToSelf(cleanMsg, cleanupTime));
+				log.info("Node {} reported as failed", idFromRef(failing));
+			}
+
 		} else {
 			log.warning("Dropped Fail message (expected Id: {}, found: {}) -> {}",
 				nodes.get(failing).getTimeoutId(), failId, msg.toString());
 		}
+	}
 
-		// schedule message to remove the node from the heartbeat map
-		Cleanup cleanMsg = new Cleanup(failing, nodes.get(failing).getTimeoutId() + 1);
-		nodes.get(failing).resetTimeout(sendToSelf(cleanMsg, cleanupTime));
+	private void onMiss(Miss msg) {
+		ActorRef missing = msg.getMissing();
+		long missId = msg.getMissId();
+
+		// check if the Miss message was still valid
+		if (nodes.get(missing).getTimeoutId() == missId) {
+			log.info("Node {} reported as failed (was missing)", idFromRef(missing));
+
+			// missing node is definitely considered crashed
+			// remove from correct nodes and report to Tracker
+			nodes.setFailed(missing);
+			sendToTracker(new CrashReport(missing));
+
+			// schedule cleanup
+			Cleanup cleanMsg = new Cleanup(missing, nodes.get(missing).getTimeoutId() + 1);
+			nodes.get(missing).resetTimeout(sendToSelf(cleanMsg, cleanupTime));
+		}
 	}
 
 	/**
@@ -339,11 +376,13 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	}
 
 	private void sendMulticast() {
+
 		// evaluate probability of sending (send for sure if Wait = MaxWait)
 		double multicastProb = Math.pow((double) multicastWait / multicastMaxWait, multicastParam);
 		double rand = Math.random();
 
 		if (rand < multicastProb) {
+
 			// do multicast
 			nodes.get(getSelf()).heartbeat();
 			multicastWait = 0;
@@ -354,6 +393,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			nodes.getCorrectNodes().forEach(ref -> nodes.get(ref).resetQuiescence());
 			log.debug("multicast: " + nodes.beatsToString());
 		} else {
+
 			// multicast postponed
 			multicastWait++;
 			sendToSelf(new CatastropheReminder(), 1000);
@@ -384,18 +424,25 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	}
 
 	private void updateBeats(Map<ActorRef, Long> gossipedBeats) {
-		nodes.getCorrectNodes().forEach(ref -> {
-			long gossipedBeatCount = gossipedBeats.get(ref);
+		nodes.getUpdatableNodes().forEach((ref) -> {
+			long beats = gossipedBeats.get(ref);
+
 			// if a higher heartbeat counter was gossiped, update it
-			if (gossipedBeatCount > nodes.get(ref).getBeatCount()) {
-				nodes.get(ref).setBeatCount(gossipedBeatCount);
+			if (beats > nodes.get(ref).getBeatCount()) {
+				nodes.get(ref).setBeatCount(beats);
+
 				// lower the probability of gossiping the same node soon
 				nodes.get(ref).resetQuiescence();
+
+				// if the node was missing, change it back to a normal node
+				nodes.unsetMissing(ref);
+
 				// restart the timeout
 				Fail failMsg = new Fail(ref, nodes.get(ref).getTimeoutId() + 1);
 				nodes.get(ref).resetTimeout(sendToSelf(failMsg, failTime));
 			} else {
-				// no heartbeat update (will increase probability of gossip)
+
+				// no heartbeat update, increase probability of gossiping the node
 				nodes.get(ref).quiescent();
 			}
 		});

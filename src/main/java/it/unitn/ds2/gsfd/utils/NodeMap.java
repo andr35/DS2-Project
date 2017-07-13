@@ -10,15 +10,23 @@ import java.util.*;
  */
 public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 
+	// owner of this view of the system
 	private ActorRef primary;
+
 	// nodes considered correct
+	// these can be updated and gossiped to
 	private List<ActorRef> correctNodes;
+
+	// nodes that may be missing (catastrophe reaction)
+	// these can be updated but not gossiped to
+	private List<ActorRef> missingNodes;
 
 	public NodeMap(List<ActorRef> nodes, ActorRef primary) {
 		this.primary = primary;
 		correctNodes = new ArrayList<>(nodes);
 		correctNodes.remove(this.primary);
 		nodes.forEach(ref -> put(ref, new NodeInfo()));
+		missingNodes = new ArrayList<>();
 	}
 
 	@Override
@@ -30,11 +38,29 @@ public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 	}
 
 	public void setFailed(ActorRef ref) {
+		missingNodes.remove(ref);
 		correctNodes.remove(ref);
+	}
+
+	public void setMissing(ActorRef ref) {
+		missingNodes.add(ref);
+	}
+
+	public void unsetMissing(ActorRef ref) {
+		missingNodes.remove(ref);
 	}
 
 	public List<ActorRef> getCorrectNodes() {
 		return Collections.unmodifiableList(correctNodes);
+	}
+
+	public List<ActorRef> getUpdatableNodes() {
+		List<ActorRef> updatables = new ArrayList<>(correctNodes);
+		for (ActorRef ref : missingNodes){
+			if (!updatables.contains(ref))
+				updatables.add(ref);
+		}
+		return updatables;
 	}
 
 	public Map<ActorRef, Long> getBeats() {
