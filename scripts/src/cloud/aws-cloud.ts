@@ -4,13 +4,13 @@ import {Cloud} from './cloud';
 import {Options} from '../common/options';
 import {CloudKeys} from '../common/cloud-keys';
 import {ProjectUtils} from "../common/utils";
+import {spawn} from "child_process";
 import * as aws from 'aws-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as chalk from 'chalk';
 import * as scp2 from 'scp2';
 import * as ssh2 from 'ssh2';
-import {spawn} from "child_process";
 
 interface EC2Machine {
   instance: Instance;
@@ -121,19 +121,28 @@ export class AwsCloud implements Cloud {
       // Create nodes
       for (let i = 1; i <= this.options.nodes; i++) {
         reg = this.getRandomRegion();
-        const trackerInstance = await this.createEC2Instance(i, reg);
-        this.nodes[trackerInstance.InstanceId] = {
-          instance: trackerInstance,
-          region: reg,
-          id: i
-        };
+        try {
+          const trackerInstance = await this.createEC2Instance(i, reg);
+          this.nodes[trackerInstance.InstanceId] = {
+            instance: trackerInstance,
+            region: reg,
+            id: i
+          };
+        } catch (err) {
+          if (err && err.code === 'InstanceLimitExceeded') {
+            console.log(chalk.yellow('i Limit for EC2 machine in the region exceeded, change region...'));
+            // Retry instantiation
+            this.regions.splice(this.regions.indexOf(reg), 1);
+            i--;
+          }
+        }
       }
 
       // Deploy project on machines and start it
       await new Promise((resolve) => {
         this.startDeployTimeout(30000, resolve);
       });
-      console.log(chalk.bold.green('> Experiment started successfully. Nodes:'), this.deployedNodes.map(n => {
+      console.log(chalk.bold.green(`> Experiment "${this.experimentName}" started successfully. Nodes:`), this.deployedNodes.map(n => {
         //noinspection PointlessBooleanExpressionJS
         return {
           id: n.id,
@@ -168,8 +177,7 @@ export class AwsCloud implements Cloud {
         // Filter by experiment name
         if (this.experimentName) {
           for (const instance of instances) {
-            const experiments = instance.Tags.filter(t => t.Key === 'experiment').map(e => e.Value);
-            if (experiments.length > 0 && experiments[0] === this.experimentName) {
+            if (AwsCloud.belongToExperiment(instance, this.experimentName)) {
               instancesToShutdown.push(instance);
             }
           }
@@ -198,18 +206,36 @@ export class AwsCloud implements Cloud {
   async downloadReport() {
     await this.init();
 
+    console.log(chalk.blue(`> Searching EC2 machines...`));
+    let trackerInstance = null;
+    const nodeInstances = [];
+    for (let region of this.regions) {
+      const instances = await this.getInstancesForRegion(region);
+      for (let instance of instances) {
+        if (AwsCloud.isTracker(instance)) {
+          trackerInstance = instance;
+        } else {
+          nodeInstances.push(instance);
+        }
+      }
+    }
+
     try {
-      console.log(chalk.blue(`> Search tracker...`));
-      const trackerInstance = await this.getTrackerInstance();
       if (trackerInstance === null) {
         console.log(chalk.red('> Unable to discover the tracker instance.'));
         process.exit(-1);
       } else {
-
         console.log(chalk.yellow('> Trying to download report...'));
         await this.downloadDir(trackerInstance.PublicIpAddress, this.options.reportDir, this.options.downloadDir);
         console.log(chalk.yellow('> Trying to download tracker log...'));
-        await this.downloadStuff(trackerInstance.PublicIpAddress, ProjectUtils.EC2_LOG_PATH, this.options.downloadDir);
+        await this.downloadSingleFile(trackerInstance.PublicIpAddress, ProjectUtils.EC2_LOG_PATH, this.options.downloadDir, 'tracker.log');
+
+        for (let instance of nodeInstances) {
+          const nodeId = AwsCloud.getInstanceNodeId(instance);
+          console.log(chalk.yellow(`> Trying to download node "${nodeId}" log...`));
+          await this.downloadSingleFile(instance.PublicIpAddress, ProjectUtils.EC2_LOG_PATH, this.options.downloadDir, `node-${nodeId}.log`);
+        }
+
         console.log(chalk.bold.green(`> Complete! Files downloaded in ${this.options.downloadDir}`));
       }
     } catch (err) {
@@ -343,17 +369,43 @@ export class AwsCloud implements Cloud {
       const instances = await this.getInstancesForRegion(region);
       for (const instance of instances) {
         // Search for tracker
-        const types = instance.Tags.filter(t => t.Key === 'type').map(t => t.Value);
-        if (types.length > 0 && types[0] === 'tracker') {
-          // Check tracker's experiment name
-          const experiments = instance.Tags.filter(t => t.Key === 'experiment').map(e => e.Value);
-          if (experiments.length > 0 && experiments[0] === this.experimentName) {
-            return instance;
-          }
+        if (AwsCloud.isTracker(instance) && AwsCloud.belongToExperiment(instance, this.experimentName)) {
+          return instance;
         }
       }
     }
     return null;
+  }
+
+  /**
+   * Check if an EC2 machine is a tracker.
+   * @param instance Instance.
+   * @return {boolean} True if machine is a tracker, false otherwise.
+   */
+  private static isTracker(instance: Instance): boolean {
+    const types = instance.Tags.filter(t => t.Key === 'type').map(t => t.Value);
+    return types.length > 0 && types[0] === 'tracker';
+  }
+
+  /**
+   * Check if a EC2 machine belongs to a certain experiment.
+   * @param instance Instance.
+   * @param experimentName Name of the experiment.
+   * @return {boolean} True if machine belong to the experiment, false otherwise.
+   */
+  private static belongToExperiment(instance: Instance, experimentName: string): boolean {
+    const experiments = instance.Tags.filter(t => t.Key === 'experiment').map(e => e.Value);
+    return experiments.length > 0 && experiments[0] === experimentName;
+  }
+
+  /**
+   * Get the node id assigned to an EC2 machine.
+   * @param instance Instance.
+   * @return {string} Node Id.
+   */
+  private static getInstanceNodeId(instance: Instance): string {
+    const ids = instance.Tags.filter(t => t.Key === 'id').map(e => e.Value);
+    return ids.length > 0 ? ids[0] : '';
   }
 
   /**
@@ -487,7 +539,7 @@ export class AwsCloud implements Cloud {
                 } else { // Some nodes still need to be deployed
                   if (machine.tracker) {
                     // Trigger immediately a new timeout
-                    console.log(chalk.green('> Tracker bootstrapped! Triggering a new deploy timeout...'));
+                    console.log(chalk.bold.green('> Tracker bootstrapped! Triggering a new deploy timeout...'));
                     this.startDeployTimeout(300, resolve);
                   }
                 }
@@ -498,7 +550,7 @@ export class AwsCloud implements Cloud {
           }
         }
       } catch (err) {
-        console.log(chalk.bgBlue('> A machine fail the deploy. '), err);
+        console.log(chalk.bgRed('> A machine fail the deploy.'), err);
       }
 
       console.log(chalk.bold.blue('> Setting next timeout in ' + ((timeout + 20000) / 1000) + ' sec...'));
@@ -612,7 +664,7 @@ export class AwsCloud implements Cloud {
     }
   }
 
-  private async downloadStuff(ip: string, src: string, dest: string) {
+  private async downloadSingleFile(ip: string, src: string, dest: string, destFileName: string) {
     await new Promise((resolve, reject) => {
       scp2.scp({
         host: ip,
@@ -620,7 +672,7 @@ export class AwsCloud implements Cloud {
         privateKey: fs.readFileSync(path.resolve(this.options.sshKey)),
         passphrase: this.options.sshPassphrase ? this.options.sshPassphrase : undefined,
         path: src
-      }, path.resolve(dest) + '/', err => err ? reject(err) : resolve());
+      }, path.resolve(dest) + '/' + destFileName, err => err ? reject(err) : resolve());
     });
   }
 
