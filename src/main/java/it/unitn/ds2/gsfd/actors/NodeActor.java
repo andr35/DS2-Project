@@ -425,25 +425,27 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 	private void updateBeats(Map<ActorRef, Long> gossipedBeats) {
 		nodes.getUpdatableNodes().forEach((ref) -> {
-			long beat = gossipedBeats.get(ref);
+			if (gossipedBeats.containsKey(ref)) {
+				long beat = gossipedBeats.get(ref);
 
-			// if a higher heartbeat counter was gossiped, update it
-			if (beat > nodes.get(ref).getBeatCount()) {
-				nodes.get(ref).setBeatCount(beat);
+				// if a higher heartbeat counter was gossiped, update it
+				if (beat > nodes.get(ref).getBeatCount()) {
+					nodes.get(ref).setBeatCount(beat);
 
-				// lower the probability of gossiping the same node soon
-				nodes.get(ref).resetQuiescence();
+					// lower the probability of gossiping the same node soon
+					nodes.get(ref).resetQuiescence();
 
-				// if the node was missing, change it back to a normal node
-				nodes.unsetMissing(ref);
+					// if the node was missing, change it back to a normal node
+					nodes.unsetMissing(ref);
 
-				// restart the timeout
-				Fail failMsg = new Fail(ref, nodes.get(ref).getTimeoutId() + 1);
-				nodes.get(ref).resetTimeout(sendToSelf(failMsg, failTime));
-			} else {
+					// restart the timeout
+					Fail failMsg = new Fail(ref, nodes.get(ref).getTimeoutId() + 1);
+					nodes.get(ref).resetTimeout(sendToSelf(failMsg, failTime));
+				} else {
 
-				// no heartbeat update, increase probability of gossiping the node
-				nodes.get(ref).quiescent();
+					// no heartbeat update, increase probability of gossiping the node
+					nodes.get(ref).quiescent();
+				}
 			}
 		});
 	}
