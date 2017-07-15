@@ -213,7 +213,7 @@ public final class Experiment {
 
 	@Override
 	public String toString() {
-		return String.format("nodes=%d, duration=%ds, push_pull=%s, expected_crashes=%d",
+		return String.format("nodes=%d, duration=%dms, push_pull=%s, expected_crashes=%d",
 			numberOfNodes, duration, pushPull, expectedCrashes.size());
 	}
 }

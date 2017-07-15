@@ -20,7 +20,7 @@ export class Script {
       .option('-p --ssh-passphrase <n>', 'Ssh key password');
 
     program
-      .command('start <location>')
+      .command('start <experiment-name>')
       .description('Start an experiment (in local / aws)')
       .option('-n --nodes <n>', 'Number of nodes to use in the experiment', parseNumericOption)
       .option('-d --duration <n>', 'Duration of an experiment (in milliseconds)', parseNumericOption)
@@ -28,22 +28,23 @@ export class Script {
       .option('-z --repetitions <n>', 'Repeat experiment n times', parseNumericOption)
       .option('-i --initial-seed <n>', 'Initial seed', parseNumericOption)
       .option('-r --report-path <n>', 'Report path for the tracker')
+      .option('-l --local', 'Start experiment locally')
       .action((extraArg: string, options: any) => this.start(extraArg, {...options, ...options.parent}));
 
     program
-      .command('shutdown <location>')
+      .command('shutdown [experiment-name]')
       .description('Shutdown machines on cloud')
       .action((extraArg: string, options: any) => this.shutdown(extraArg, {...options, ...options.parent}));
 
     program
-      .command('report <location>')
+      .command('report <experiment-name>')
       .description('Download reports from a tracker')
-      .option('-d --download-dir <n>', 'Directory where put downloaded reports')
-      .option('-r --report-dir <n>', 'Directory where reports are stored on the remote machine')
+      .option('-d --download-dir <path>', 'Directory where put downloaded reports')
+      .option('-r --report-dir <path>', 'Directory where reports are stored on the remote machine')
       .action((extraArg: string, options: any) => this.report(extraArg, {...options, ...options.parent}));
 
     program
-      .command('watch <location>')
+      .command('watch <experiment-name>')
       .description('Download reports from a tracker')
       .action((extraArg: string, options: any) => this.watch(extraArg, {...options, ...options.parent}));
   }
@@ -61,45 +62,33 @@ export class Script {
   //  Commands
   // /////////////////////////////////////////////////
 
-  private start(location: string, options: Options) {
+  private start(experimentName: string, options: Options) {
 
     this.completeTrackerOptions(options).then(options => {
-      switch (location) {
-        case 'local':
-          console.info(chalk.bold.blue('> Start machines in local environment...'));
-          new LocalMachine(options).startExperiment();
-          break;
-        case 'aws':
-          // Check for options
-          Script.checkCloudKeysPassed(options);
-          Script.checkSshKeysPassed(options);
-          console.info(chalk.bold.blue('> Start cloud machines...'));
-          new AwsCloud(options).startExperiment();
-          break;
-        default:
-          Script.printWrongLocationEndExit();
+      if (options.local) {
+        // Run experiment locally
+        console.info(chalk.bold.blue('> Start machines in local environment...'));
+        new LocalMachine(options).startExperiment();
+      } else { // Run experiment on AWS
+        // Check for options
+        Script.checkCloudKeysPassed(options);
+        Script.checkSshKeysPassed(options);
+        console.info(chalk.bold.blue('> Start cloud machines...'));
+        new AwsCloud(experimentName, options).startExperiment();
       }
     }).catch(err => Script.printErrorAndExit(err));
   }
 
   //noinspection JSMethodCanBeStatic
-  private shutdown(location: string, options: Options) {
+  private shutdown(experimentName: string, options: Options) {
     // Check for options
     Script.checkCloudKeysPassed(options);
-
     console.info(chalk.bold.blue('> Shutdown cloud machines...'));
-
-    switch (location) {
-      case 'aws':
-        new AwsCloud(options).shutdown();
-        break;
-      default:
-        Script.printWrongLocationEndExit();
-    }
+    new AwsCloud(experimentName, options).shutdown();
   }
 
   //noinspection JSMethodCanBeStatic
-  private report(location: string, options: Options) {
+  private report(experimentName: string, options: Options) {
     // Check for options
     Script.checkDownloadDirPassed(options);
     Script.checkCloudKeysPassed(options);
@@ -107,31 +96,17 @@ export class Script {
 
     // Do
     console.info(chalk.bold.blue('> Download report from tracker...'));
-    switch (location) {
-      case 'aws':
-        new AwsCloud(options).downloadReport();
-        break;
-      default:
-        Script.printWrongLocationEndExit();
-    }
-
+    new AwsCloud(experimentName, options).downloadReport();
   }
 
   //noinspection JSMethodCanBeStatic
-  private watch(location: string, options: Options) {
+  private watch(experimentName: string, options: Options) {
     // Check for options
     Script.checkCloudKeysPassed(options);
     Script.checkSshKeysPassed(options);
 
     console.info(chalk.bold.blue('> Watching tracker logs...'));
-    switch (location) {
-      case 'aws':
-        new AwsCloud(options).watchTrackerLogs();
-        break;
-      default:
-        Script.printWrongLocationEndExit();
-    }
-
+    new AwsCloud(experimentName, options).watchTrackerLogs();
   }
 
   // /////////////////////////////////////////////////
@@ -222,11 +197,6 @@ export class Script {
       console.log(chalk.yellow('i No report directory provided with "--report-dir" option. Use default ' + repDir));
       options.reportDir = repDir;
     }
-  }
-
-  static printWrongLocationEndExit() {
-    console.error(chalk.bold.red('Must provide a valid <location> argument.'));
-    process.exit(-1);
   }
 
   static printErrorAndExit(err: any) {

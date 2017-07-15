@@ -79,7 +79,7 @@ Optional experiment options:
 Use `node dist/index.js start --help` to list them.
 
 ```bash
-$ node dist/index.js start aws --keys ./aws.config.json --ssh-key ./awsSsh --ssh-passphrase password
+$ node dist/index.js start experimentName --keys ./aws.config.json --ssh-key ./awsSsh --ssh-passphrase password
 ```
 
 #### Shutdown
@@ -87,7 +87,7 @@ $ node dist/index.js start aws --keys ./aws.config.json --ssh-key ./awsSsh --ssh
 Stop and terminate **all** EC2 instances on AWS.
 
 ```bash
-$ node dist/index.js shutdown aws --keys "./aws.config.json"
+$ node dist/index.js shutdown [experimentName] --keys "./aws.config.json"
 ```
 
 #### See tracker log
@@ -95,7 +95,7 @@ $ node dist/index.js shutdown aws --keys "./aws.config.json"
 Read the log of the Tracker node.
 
 ```bash
-node dist/index.js watch aws --keys ./aws.config.json --ssh-key ./awsSsh --ssh-passphrase password
+node dist/index.js watch experimentName --keys ./aws.config.json --ssh-key ./awsSsh --ssh-passphrase password
 ```
 
 #### Download experiment reports
@@ -107,7 +107,7 @@ Options:
 - *--report-dir* (optional) Remote directory where report files are located.
 
 ```bash
-node dist/index.js report  aws  --keys ./aws.config.json --ssh-key ./awsSsh --ssh-passphrase password --download-dir /home/notebook/reports
+node dist/index.js report  experimentName  --keys ./aws.config.json --ssh-key ./awsSsh --ssh-passphrase password --download-dir /home/notebook/reports
 ```
 
 ### Example

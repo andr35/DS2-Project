@@ -66,7 +66,7 @@ export class AwsCloud implements Cloud {
   // Filled with completely project deployed and running nodes
   private deployedNodes: EC2Machine[] = [];
 
-  constructor(private options: Options) {
+  constructor(private experimentName: string, private options: Options) {
     // Load access key and secret key
     const keys = this.readKeys();
     aws.config.update({
@@ -156,10 +156,28 @@ export class AwsCloud implements Cloud {
   async shutdown() {
     await this.init();
 
+    if (!this.experimentName) {
+      console.log(chalk.yellow('> Warning: This command will terminate ALL the running EC2 machines!'));
+    }
+
     for (let region of this.regions) {
       try {
         const instances = await this.getInstancesForRegion(region);
-        const instanceIds = instances.map(inst => inst.InstanceId);
+        let instancesToShutdown = [];
+
+        // Filter by experiment name
+        if (this.experimentName) {
+          for (const instance of instances) {
+            const experiments = instance.Tags.filter(t => t.Key === 'experiment').map(e => e.Value);
+            if (experiments.length > 0 && experiments[0] === this.experimentName) {
+              instancesToShutdown.push(instance);
+            }
+          }
+        } else {
+          instancesToShutdown = instances;
+        }
+
+        const instanceIds = instancesToShutdown.map(inst => inst.InstanceId);
         if (instanceIds.length > 0) {
           this.ec2[region].terminateInstances({InstanceIds: instanceIds}, (err, data) => {
             if (err) {
@@ -184,7 +202,7 @@ export class AwsCloud implements Cloud {
       console.log(chalk.blue(`> Search tracker...`));
       const trackerInstance = await this.getTrackerInstance();
       if (trackerInstance === null) {
-        console.log(chalk.red('Unable to discover the tracker instance.'));
+        console.log(chalk.red('> Unable to discover the tracker instance.'));
         process.exit(-1);
       } else {
 
@@ -195,7 +213,7 @@ export class AwsCloud implements Cloud {
         console.log(chalk.bold.green(`> Complete! Files downloaded in ${this.options.downloadDir}`));
       }
     } catch (err) {
-      console.log(chalk.bold.red(`Error occurred`), err);
+      console.log(chalk.bold.red(`> Error occurred`), err);
     }
   }
 
@@ -308,7 +326,8 @@ export class AwsCloud implements Cloud {
       Resources: [instance.InstanceId],
       Tags: [
         {Key: 'type', Value: tracker ? 'tracker' : 'node'},
-        {Key: 'id', Value: tracker ? '0' : `${id}`}
+        {Key: 'id', Value: tracker ? '0' : `${id}`},
+        {Key: 'experiment', Value: this.experimentName}
       ]
     }).promise();
     return instance;
@@ -323,9 +342,12 @@ export class AwsCloud implements Cloud {
     for (let region of this.regions) {
       const instances = await this.getInstancesForRegion(region);
       for (const instance of instances) {
+        // Search for tracker
         const types = instance.Tags.filter(t => t.Key === 'type').map(t => t.Value);
-        for (const t of types) {
-          if (t === 'tracker') {
+        if (types.length > 0 && types[0] === 'tracker') {
+          // Check tracker's experiment name
+          const experiments = instance.Tags.filter(t => t.Key === 'experiment').map(e => e.Value);
+          if (experiments.length > 0 && experiments[0] === this.experimentName) {
             return instance;
           }
         }
@@ -465,6 +487,7 @@ export class AwsCloud implements Cloud {
                 } else { // Some nodes still need to be deployed
                   if (machine.tracker) {
                     // Trigger immediately a new timeout
+                    console.log(chalk.green('> Tracker bootstrapped! Triggering a new deploy timeout...'));
                     this.startDeployTimeout(300, resolve);
                   }
                 }
@@ -501,7 +524,7 @@ export class AwsCloud implements Cloud {
       throw AwsCloud.ec2NodeString(node) + ' Tracker not yet bootstrapped';
     } else {
       // Try to start project
-     await this.startProjectInInstance(node);
+      await this.startProjectInInstance(node);
 
       // Success
       this.deployedNodes.push(node);
