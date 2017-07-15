@@ -206,8 +206,9 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 			.collect(Collectors.toMap(ExpectedCrash::getNode, ExpectedCrash::getDelta));
 		final long gossipTime = current.getGossipDelta();
 		final long failTime = current.getFailureDelta();
-		final double multicastParam = current.getMulticastParameter();
-		final int multicastMaxWait = current.getMulticastMaxWaitDelta();
+		final double multicastParam = current.getMulticastParam();
+		final int multicastMaxWait = current.getMulticastMaxWait();
+		final int pickStrategy = current.getPickStrategy();
 
 		// log the start of the experiment...
 		log.warning("StartExperiment experiment {} of {} [{}]", index + 1, experiments.size(), current.toString());
@@ -217,9 +218,9 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		nodes.forEach(node -> {
 			final String id = idFromRef(node);
 			if (crashesByNode.containsKey(id)) {
-				node.tell(StartExperiment.crash(current.isPushPull(), crashesByNode.get(id), nodes, gossipTime, failTime, multicastParam, multicastMaxWait), getSelf());
+				node.tell(StartExperiment.crash(current.isPushPull(), crashesByNode.get(id), nodes, gossipTime, failTime, current.iscatastrophe(), multicastParam, multicastMaxWait, pickStrategy), getSelf());
 			} else {
-				node.tell(StartExperiment.normal(current.isPushPull(), nodes, gossipTime, failTime, multicastParam, multicastMaxWait), getSelf());
+				node.tell(StartExperiment.normal(current.isPushPull(), nodes, gossipTime, failTime, current.iscatastrophe(), multicastParam, multicastMaxWait, pickStrategy), getSelf());
 			}
 		});
 

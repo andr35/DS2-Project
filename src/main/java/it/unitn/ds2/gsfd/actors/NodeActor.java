@@ -70,6 +70,9 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	private long gossipTime;
 	private Cancellable gossipTimeout;
 
+	// if true, activates countermeasures for catastrophe
+	private boolean catastrophe;
+
 	// parameter used to decide if the node will multicast
 	private double multicastParam;
 
@@ -82,8 +85,14 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	// timeout to issue another try for multicast
 	private Cancellable multicastTimeout;
 
+	// grace time, in catastrophic events, to decide if the node has really crashed
+	private long missTime;
+
 	// if true, the node replies to the gossip sender
 	private boolean pullByGossip;
+
+	// tells what strategy to use when choosing a (random) node to gossip (see NodeMap's pickNode)
+	private int pickStrategy;
 
 	// log, used for debug proposes
 	private final DiagnosticLoggingAdapter log;
@@ -109,7 +118,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		this.log = Logging.getLogger(this);
 		this.log.setMDC(mdc);
 
-		// messages to accept in the NOT_READY state (before an experiment)
+		// messages to accept in the NOT_READY state
+		// (before an experiment or while a crash is simulated)
 		notReady = receiveBuilder()
 			.match(Shutdown.class, msg -> onShutdown())
 			.match(StartExperiment.class, this::onStart)
@@ -127,9 +137,11 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			.match(Gossip.class, this::onGossip)
 			.match(GossipReply.class, this::onGossipReply)
 			.match(Fail.class, this::onFail)
+			.match(Miss.class, this::onMiss)
 			.match(Cleanup.class, this::onCleanup)
 			.match(CatastropheReminder.class, msg -> sendMulticast())
 			.match(CatastropheMulticast.class, this::onMulticast)
+			.match(CatastropheReply.class, this::onMulticastReply)
 			.matchAny(msg -> log.error("Received unknown message -> " + msg))
 			.build();
 
@@ -195,15 +207,26 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		// schedule reminder to perform first Gossip
 		gossipTimeout = sendToSelf(new GossipReminder(), gossipTime);
 
-		// setup for catastrophe recovery
-		multicastParam = msg.getMulticastParam();
-		multicastMaxWait = msg.getMulticastMaxWait();
-		multicastWait = 0;
+		// set strategy for gossip's random node choice
+		pickStrategy = msg.getPickStrategy();
 
-		// schedule reminder to attempt multicast
-		multicastTimeout = sendToSelf(new CatastropheReminder(), 1000);
+		// setup for catastrophe recovery
+		catastrophe = msg.isCatastrophe();
+		if (catastrophe) {
+			log.info("multicast is active");
+			multicastParam = msg.getMulticastParam();
+			multicastMaxWait = msg.getMulticastMaxWait();
+			multicastWait = 0;
+			missTime = failTime; // TODO: how to compute missTime?
+
+			// schedule reminder to attempt multicast
+			multicastTimeout = sendToSelf(new CatastropheReminder(), 1000);
+		} else {
+			log.info("multicast is not active");
+		}
 
 		// debug
+		log.info("pick strategy: " + pickStrategy);
 		if (delta != null) log.info("onStart complete (faulty, crashes in " + msg.getDelta() + ")");
 		else log.info("onStart complete (correct)");
 		log.debug("nodes: " + nodes.beatsToString());
@@ -232,12 +255,12 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 		// TODO: check that this works with the experiments
 		// pick random correct node
-		ActorRef gossipNode = nodes.pickNode();
+		ActorRef gossipNode = nodes.pickNode(pickStrategy);
 		if (gossipNode != null) {
 
 			// gossip the beats to the random node
 			gossipNode.tell(new Gossip(nodes.getBeats()), getSelf());
-			log.debug("gossiped to {}: " + nodes.beatsToString(), idFromRef(gossipNode));
+			log.debug("gossip to {}: " + nodes.beatsToString(), idFromRef(gossipNode));
 
 			// lower the probability of gossiping the same node soon
 			nodes.get(gossipNode).resetQuiescence();
@@ -251,7 +274,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	}
 
 	private void onGossip(Gossip msg) {
-		log.debug("gossiped by {}, beats={}, push_pull={}", idFromRef(getSender()), nodes.beatsToString(), pullByGossip);
+		log.debug("gossip from {}, beats={}, push_pull={}", idFromRef(getSender()), nodes.beatsToString(), pullByGossip);
 
 		// this method update both the beats for all nodes and resets the quiescence for any updated
 		updateBeats(msg.getBeats());
@@ -263,9 +286,15 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		}
 	}
 
+	/**
+	 * This method is called to handle a gossip reply.
+	 * Used only if push-pull strategy is active (pullByGossip).
+	 *
+	 * @param msg Gossip-type message (heartbeats).
+	 */
 	private void onGossipReply(GossipReply msg) {
 		updateBeats(msg.getBeats());
-		log.debug("gossiped (reply) by {}", idFromRef(getSender()));
+		log.debug("gossip (reply) from {}", idFromRef(getSender()));
 	}
 
 	/**
@@ -280,20 +309,58 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 		// check if the Fail message was still valid
 		if (nodes.get(failing).getTimeoutId() == failId) {
-			// remove from correct nodes and report to Tracker
-			nodes.setFailed(failing);
-			sendToTracker(new CrashReport(failing));
-			log.info("Node {} reported as failed", idFromRef(failing));
+			if (catastrophe) {
+
+				// stop gossiping the suspected node
+				nodes.setMissing(failing);
+
+				// give the system more time to decide if the node is failed
+				Miss missMsg = new Miss(failing, nodes.get(failing).getTimeoutId() + 1);
+				nodes.get(failing).resetTimeout(sendToSelf(missMsg, missTime));
+				log.info("Node {} is missing", idFromRef(failing));
+			} else {
+
+				// remove from correct nodes and report to Tracker
+				nodes.setFailed(failing);
+				sendToTracker(new CrashReport(failing));
+
+				// schedule message to remove the node from the heartbeat map
+				Cleanup cleanMsg = new Cleanup(failing, nodes.get(failing).getTimeoutId() + 1);
+				nodes.get(failing).resetTimeout(sendToSelf(cleanMsg, cleanupTime));
+				log.info("Node {} reported as failed", idFromRef(failing));
+			}
+
 		} else {
 			log.warning("Dropped Fail message (expected Id: {}, found: {}) -> {}",
 				nodes.get(failing).getTimeoutId(), failId, msg.toString());
 		}
-
-		// schedule message to remove the node from the heartbeat map
-		Cleanup cleanMsg = new Cleanup(failing, nodes.get(failing).getTimeoutId() + 1);
-		nodes.get(failing).resetTimeout(sendToSelf(cleanMsg, cleanupTime));
 	}
 
+	private void onMiss(Miss msg) {
+		ActorRef missing = msg.getMissing();
+		long missId = msg.getMissId();
+
+		// check if the Miss message was still valid
+		if (nodes.get(missing).getTimeoutId() == missId) {
+			log.info("Node {} reported as failed (was missing)", idFromRef(missing));
+
+			// missing node is definitely considered crashed
+			// remove from correct nodes and report to Tracker
+			nodes.setFailed(missing);
+			sendToTracker(new CrashReport(missing));
+
+			// schedule cleanup
+			Cleanup cleanMsg = new Cleanup(missing, nodes.get(missing).getTimeoutId() + 1);
+			nodes.get(missing).resetTimeout(sendToSelf(cleanMsg, cleanupTime));
+		}
+	}
+
+	/**
+	 * This method is called when cleanup timeout is expired for a node
+	 * after it is believed to have crashed. This is a self-message.
+	 *
+	 * @param msg Details with the node that is to be completely removed.
+	 */
 	private void onCleanup(Cleanup msg) {
 		ActorRef failed = msg.getFailed();
 		long cleanId = msg.getCleanId();
@@ -309,11 +376,13 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	}
 
 	private void sendMulticast() {
+
 		// evaluate probability of sending (send for sure if Wait = MaxWait)
 		double multicastProb = Math.pow((double) multicastWait / multicastMaxWait, multicastParam);
 		double rand = Math.random();
 
 		if (rand < multicastProb) {
+
 			// do multicast
 			nodes.get(getSelf()).heartbeat();
 			multicastWait = 0;
@@ -324,6 +393,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			nodes.getCorrectNodes().forEach(ref -> nodes.get(ref).resetQuiescence());
 			log.debug("multicast: " + nodes.beatsToString());
 		} else {
+
 			// multicast postponed
 			multicastWait++;
 			sendToSelf(new CatastropheReminder(), 1000);
@@ -334,26 +404,45 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	 * This method is called when this node receive a message that was
 	 * sent in multicast to all nodes.
 	 *
-	 * @param msg Message.
+	 * @param msg Message with nodes beats.
 	 */
 	private void onMulticast(CatastropheMulticast msg) {
 		multicastWait = 0;
 		updateBeats(msg.getBeats());
+
+		// send back node's heartbeats to multicast originator
+		// this is always done regardless of push-pull option
+		reply(new CatastropheReply(nodes.getBeats()));
+		log.debug("multicast from {}, beats={}", idFromRef(getSender()), nodes.beatsToString());
+	}
+
+	private void onMulticastReply(CatastropheReply msg) {
+		updateBeats(msg.getBeats());
+
+		// debug
+		log.debug("multicast (reply) from {}", idFromRef(getSender()));
 	}
 
 	private void updateBeats(Map<ActorRef, Long> gossipedBeats) {
-		nodes.getCorrectNodes().forEach(ref -> {
-			long gossipedBeatCount = gossipedBeats.get(ref);
+		nodes.getUpdatableNodes().forEach((ref) -> {
+			long beats = gossipedBeats.get(ref);
+
 			// if a higher heartbeat counter was gossiped, update it
-			if (gossipedBeatCount > nodes.get(ref).getBeatCount()) {
-				nodes.get(ref).setBeatCount(gossipedBeatCount);
+			if (beats > nodes.get(ref).getBeatCount()) {
+				nodes.get(ref).setBeatCount(beats);
+
 				// lower the probability of gossiping the same node soon
 				nodes.get(ref).resetQuiescence();
+
+				// if the node was missing, change it back to a normal node
+				nodes.unsetMissing(ref);
+
 				// restart the timeout
 				Fail failMsg = new Fail(ref, nodes.get(ref).getTimeoutId() + 1);
 				nodes.get(ref).resetTimeout(sendToSelf(failMsg, failTime));
 			} else {
-				// no heartbeat update (will increase probability of gossip)
+
+				// no heartbeat update, increase probability of gossiping the node
 				nodes.get(ref).quiescent();
 			}
 		});
