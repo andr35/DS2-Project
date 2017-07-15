@@ -252,7 +252,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		// increment node's own heartbeat counter
 		nodes.get(getSelf()).heartbeat();
 
-		// TODO: check that this works with the experiments
+		// TODO: check that this works with the experiments (resetting quiescence)
 		// pick random correct node
 		ActorRef gossipNode = nodes.pickNode(pickStrategy);
 		if (gossipNode != null) {
@@ -388,9 +388,9 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			multicastWait = 0;
 			multicast(new CatastropheMulticast(nodes.getBeats()));
 
-			// TODO: check that this works with the experiments
+			// TODO: check that this works with the experiments (resetting quiescence)
 			// even the probability of gossip to any node
-			nodes.getCorrectNodes().forEach(ref -> nodes.get(ref).resetQuiescence());
+			nodes.getUpdatableNodes().forEach(ref -> nodes.get(ref).resetQuiescence());
 			log.debug("multicast: " + beatsToString(nodes.getBeats()));
 		} else {
 
@@ -499,6 +499,6 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	 * @param message Message to send in multicast.
 	 */
 	private void multicast(Serializable message) {
-		nodes.getCorrectNodes().forEach(ref -> ref.tell(message, getSelf()));
+		nodes.getUpdatableNodes().forEach(ref -> ref.tell(message, getSelf()));
 	}
 }
