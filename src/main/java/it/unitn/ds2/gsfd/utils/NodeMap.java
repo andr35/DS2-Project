@@ -33,6 +33,7 @@ public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 	public void clear() {
 		primary = null;
 		correctNodes.clear();
+		missingNodes.clear();
 		forEach((ref, info) -> info.cancelTimeout());
 		super.clear();
 	}
@@ -43,7 +44,8 @@ public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 	}
 
 	public void setMissing(ActorRef ref) {
-		missingNodes.add(ref);
+		if (!missingNodes.contains(ref))
+			missingNodes.add(ref);
 	}
 
 	public void unsetMissing(ActorRef ref) {
@@ -69,7 +71,7 @@ public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 		return beats;
 	}
 
-	public String beatsToString() {
+	/*public String beatsToString() {
 		final StringBuilder result = new StringBuilder("{");
 		for (Map.Entry<ActorRef, NodeInfo> entry : entrySet()) {
 			ActorRef ref = entry.getKey();
@@ -77,7 +79,7 @@ public final class NodeMap extends HashMap<ActorRef, NodeInfo> {
 			result.append(" (").append(ref.path().name()).append(", ").append(info.getBeatCount()).append(") ");
 		}
 		return result.toString() + "}";
-	}
+	}*/
 
 	/**
 	 * Randomly selects one node among those that are correct.

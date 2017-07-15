@@ -177,7 +177,6 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	}
 
 	private void onStart(StartExperiment msg) {
-
 		getContext().become(ready);
 
 		// set the gossip strategy
@@ -229,7 +228,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		log.info("pick strategy: " + pickStrategy);
 		if (delta != null) log.info("onStart complete (faulty, crashes in " + msg.getDelta() + ")");
 		else log.info("onStart complete (correct)");
-		log.debug("nodes: " + nodes.beatsToString());
+		log.debug("nodes: " + beatsToString(nodes.getBeats()));
 	}
 
 	private void onStop() {
@@ -260,7 +259,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 			// gossip the beats to the random node
 			gossipNode.tell(new Gossip(nodes.getBeats()), getSelf());
-			log.debug("gossip to {}: " + nodes.beatsToString(), idFromRef(gossipNode));
+			log.debug("gossip to {}: " + beatsToString(nodes.getBeats()), idFromRef(gossipNode));
 
 			// lower the probability of gossiping the same node soon
 			nodes.get(gossipNode).resetQuiescence();
@@ -274,7 +273,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	}
 
 	private void onGossip(Gossip msg) {
-		log.debug("gossip from {}, beats={}, push_pull={}", idFromRef(getSender()), nodes.beatsToString(), pullByGossip);
+		log.debug("gossip from {}, beats={}, push_pull={}",
+			idFromRef(getSender()), beatsToString(msg.getBeats()), pullByGossip);
 
 		// this method update both the beats for all nodes and resets the quiescence for any updated
 		updateBeats(msg.getBeats());
@@ -391,7 +391,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			// TODO: check that this works with the experiments
 			// even the probability of gossip to any node
 			nodes.getCorrectNodes().forEach(ref -> nodes.get(ref).resetQuiescence());
-			log.debug("multicast: " + nodes.beatsToString());
+			log.debug("multicast: " + beatsToString(nodes.getBeats()));
 		} else {
 
 			// multicast postponed
@@ -413,23 +413,23 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		// send back node's heartbeats to multicast originator
 		// this is always done regardless of push-pull option
 		reply(new CatastropheReply(nodes.getBeats()));
-		log.debug("multicast from {}, beats={}", idFromRef(getSender()), nodes.beatsToString());
+		log.debug("multicast from {}, beats={}", idFromRef(getSender()), beatsToString(msg.getBeats()));
 	}
 
 	private void onMulticastReply(CatastropheReply msg) {
 		updateBeats(msg.getBeats());
 
 		// debug
-		log.debug("multicast (reply) from {}", idFromRef(getSender()));
+		log.debug("multicast (reply) from {}, beats={}", idFromRef(getSender()), beatsToString(msg.getBeats()));
 	}
 
 	private void updateBeats(Map<ActorRef, Long> gossipedBeats) {
 		nodes.getUpdatableNodes().forEach((ref) -> {
-			long beats = gossipedBeats.get(ref);
+			long beat = gossipedBeats.get(ref);
 
 			// if a higher heartbeat counter was gossiped, update it
-			if (beats > nodes.get(ref).getBeatCount()) {
-				nodes.get(ref).setBeatCount(beats);
+			if (beat > nodes.get(ref).getBeatCount()) {
+				nodes.get(ref).setBeatCount(beat);
 
 				// lower the probability of gossiping the same node soon
 				nodes.get(ref).resetQuiescence();
@@ -446,6 +446,16 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 				nodes.get(ref).quiescent();
 			}
 		});
+	}
+
+	private String beatsToString(Map<ActorRef, Long> beats) {
+		final StringBuilder result = new StringBuilder("{");
+		for (Map.Entry<ActorRef, Long> entry : beats.entrySet()) {
+			ActorRef ref = entry.getKey();
+			Long beat = entry.getValue();
+			result.append(" (").append(idFromRef(ref)).append(", ").append(beat).append(") ");
+		}
+		return result.toString() + "}";
 	}
 
 	/**
