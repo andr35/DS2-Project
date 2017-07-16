@@ -213,6 +213,7 @@ public final class Experiment {
 				.add("multicast_parameter", multicastParam)
 				.add("multicast_max_wait", multicastMaxWait)
 				.add("catastrophe", catastrophe)
+				.add("strategy", pickStrategy)
 			)
 			.add("result", Json.createObjectBuilder()
 				.add("start_time", start)
