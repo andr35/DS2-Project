@@ -1,0 +1,11 @@
+# IDE
+.idea/
+
+# Python
+venv/
+*.pyc
+
+# Data
+data/
+old_data/
+
