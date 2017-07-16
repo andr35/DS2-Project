@@ -40,11 +40,12 @@ public final class Experiment {
 			.collect(Collectors.toList());
 
 		// return the experiment
-		final String id = String.format("nodes-%d__pushpull-%b__duration-%d__seed-%d__repetition-%d",
-			numberOfNodes, pullByGossip, duration, seed, repetitions);
+		final String id = String.format("nodes-%d__pushpull-%b__duration-%d__seed-%d__repetition-%d__gossip_delta-%d__failure_delta-%d",
+			numberOfNodes, pullByGossip, duration, seed, repetitions, gossipDelta, failureDelta);
 		return new Experiment(id, numberOfNodes, pullByGossip, duration, expectedCrashes, gossipDelta, failureDelta,
 			true, 2, 10, 1);
-		// TODO: proper input of gossipDelta, failureDelta, catastrophe, multicastParam, multicastMaxWait and pickStrategy
+		// TODO: proper input of catastrophe, multicastParam, multicastMaxWait and pickStrategy
+		// TODO: change ID in those cases!!!
 	}
 
 	// unique identifier for the experiment
