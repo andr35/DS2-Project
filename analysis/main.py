@@ -195,10 +195,8 @@ def plot_average_detect_time(path, frame):
     :param frame: Pandas frame with all the data.
     """
 
-    # TODO: handle different number of nodes!
-
     # aggregate
-    aggregation = frame.groupby(['push_pull', 'gossip_delta', 'failure_delta'], as_index=False).agg(
+    aggregation = frame.groupby(['push_pull', 'number_of_nodes', 'gossip_delta', 'failure_delta'], as_index=False).agg(
         {
             'correct': {
                 'aggregated_correct': (lambda column: False not in list(column))
@@ -210,42 +208,44 @@ def plot_average_detect_time(path, frame):
     )
     aggregation.columns = aggregation.columns.droplevel(1)
 
-    # different plots for different gossip deltas
+    # different plots for different number of nodes and gossip deltas
+    number_of_nodes = aggregation['number_of_nodes'].unique()
     gossip_deltas = aggregation['gossip_delta'].unique()
-    for delta in gossip_deltas:
-        data = aggregation.query('gossip_delta == %d' % delta)
+    for nodes in number_of_nodes:
+        for delta in gossip_deltas:
+            data = aggregation.query('number_of_nodes == %d' % nodes).query('gossip_delta == %d' % delta)
 
-        # create the plot
-        figure = plt.figure()
-        ax = figure.add_subplot(111)
+            # create the plot
+            figure = plt.figure()
+            ax = figure.add_subplot(111)
 
-        # 2 lines: PUSH and PUSH_PULL
-        push_frame_ok = data.query('correct == True and push_pull == False')
-        push_ok = (push_frame_ok['failure_delta'], push_frame_ok['detect_time_average'])
-        push_pull_frame_ok = data.query('correct == True and push_pull == True')
-        push_pull_ok = (push_pull_frame_ok['failure_delta'], push_pull_frame_ok['detect_time_average'])
+            # 2 lines: PUSH and PUSH_PULL
+            push_frame_ok = data.query('correct == True and push_pull == False')
+            push_ok = (push_frame_ok['failure_delta'], push_frame_ok['detect_time_average'])
+            push_pull_frame_ok = data.query('correct == True and push_pull == True')
+            push_pull_ok = (push_pull_frame_ok['failure_delta'], push_pull_frame_ok['detect_time_average'])
 
-        push_frame_ko = data.query('correct == False and push_pull == False')
-        push_ko = (push_frame_ko['failure_delta'], push_frame_ko['detect_time_average'])
-        push_pull_frame_ko = data.query('correct == False and push_pull == True')
-        push_pull_ko = (push_pull_frame_ko['failure_delta'], push_pull_frame_ko['detect_time_average'])
+            push_frame_ko = data.query('correct == False and push_pull == False')
+            push_ko = (push_frame_ko['failure_delta'], push_frame_ko['detect_time_average'])
+            push_pull_frame_ko = data.query('correct == False and push_pull == True')
+            push_pull_ko = (push_pull_frame_ko['failure_delta'], push_pull_frame_ko['detect_time_average'])
 
-        ax.plot(push_ok[0] / 1000, push_ok[1] / 1000, label='push [correct]', marker='o')
-        ax.plot(push_ko[0] / 1000, push_ko[1] / 1000, label='push [wrong]', marker='x')
-        ax.plot(push_pull_ok[0] / 1000, push_pull_ok[1] / 1000, label='push_pull [correct]', marker='o')
-        ax.plot(push_pull_ko[0] / 1000, push_pull_ko[1] / 1000, label='push_pull [wrong]', marker='x')
+            ax.plot(push_ok[0] / 1000, push_ok[1] / 1000, label='push [correct]', marker='o')
+            ax.plot(push_ko[0] / 1000, push_ko[1] / 1000, label='push [wrong]', marker='x')
+            ax.plot(push_pull_ok[0] / 1000, push_pull_ok[1] / 1000, label='push_pull [correct]', marker='o')
+            ax.plot(push_pull_ko[0] / 1000, push_pull_ko[1] / 1000, label='push_pull [wrong]', marker='x')
 
-        # labels, title, axes
-        ax.legend(shadow=True)
-        ax.set_title('Average Detection Time (gossip time = %.1f s)' % (delta / 1000))
-        ax.set_xlabel('Failure Time (s)')
-        ax.set_ylabel('Detection Time (s)')
-        ax.tick_params(axis='both', which='major')
-        ax.grid(True)
+            # labels, title, axes
+            ax.legend(shadow=True)
+            ax.set_title('Average Detection Time (n = %d, t_gossip = %.1f s)' % (nodes, delta / 1000))
+            ax.set_xlabel('Failure Time (s)')
+            ax.set_ylabel('Detection Time (s)')
+            ax.tick_params(axis='both', which='major')
+            ax.grid(True)
 
-        # save plot
-        figure.savefig(path + 'detect_time__gossip_delta-%d.png' % delta, bbox_inches='tight')
-        plt.close(figure)
+            # save plot
+            figure.savefig(path + 'detect_time__nodes-%d__gossip_delta-%d.png' % (nodes, delta), bbox_inches='tight')
+            plt.close(figure)
 
 
 @click.command()
