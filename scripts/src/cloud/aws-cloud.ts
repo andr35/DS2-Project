@@ -730,7 +730,7 @@ export class AwsCloud implements Cloud {
         (options.repetitions ? `REPETITIONS=${options.repetitions} ` : ``) +
         (options.initialSeed ? `INITIAL_SEED=${options.initialSeed} ` : ``) +
         (options.reportPath ? `REPORT_PATH=${options.reportPath} ` : ``) +
-        `TIME_BETWEEN_EXPERIMENTS=10000` +
+        `TIME_BETWEEN_EXPERIMENTS=10000 ` +
         `java -jar ${ProjectUtils.JAR_NAME} tracker > ${ProjectUtils.EC2_LOG_PATH} &`;
     } else {
       return `HOST=${myIp} PORT=${10000 + id} ID=${id} java -jar ${ProjectUtils.JAR_NAME} node ${this.trackerIp} 10000 > ${ProjectUtils.EC2_LOG_PATH} &`;
