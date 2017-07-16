@@ -30,6 +30,7 @@ Experiment = collections.namedtuple('Experiment', [
     'repetition',
 
     # statistics
+    'correct',
     'n_scheduled_crashes',
     'n_expected_detected_crashes',
     'n_correctly_detected_crashes',
@@ -102,6 +103,9 @@ def parse_report(group, path):
     n_wrong = len(wrong_crashes)
     rate_detected_crashes = n_detected / n_expected_detected
 
+    # [statistic]: correct - all crashes correctly reported
+    correct = (n_expected_detected == n_detected and n_duplicated == 0 and n_wrong == 0)
+
     # [statistic]: performances - average time to detect crashes
     delays = []
     for key, delta in correct_crashes.items():
@@ -133,6 +137,7 @@ def parse_report(group, path):
         repetition=repetition,
 
         # statistics
+        correct=correct,
         n_scheduled_crashes=n_scheduled,
         n_expected_detected_crashes=n_expected_detected,
         n_correctly_detected_crashes=n_detected,
@@ -171,15 +176,20 @@ def analyze_results(base_path):
 
 @click.command()
 @click.option('--reports-path', help='Base path where to find the reports.', prompt=True)
-def main(reports_path):
+@click.option('--output-path', help='Directory where to store the result of the analysis.', prompt=True)
+def main(reports_path, output_path):
     """
     Analyze the results of the experiments and produces
     useful plots to include in the final report.
     """
 
+    # create directory for the results
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
     # analyze the results
     frame = analyze_results(reports_path)
-    click.echo(frame.to_csv(index=False))
+    frame.to_csv(output_path + os.sep + 'results.csv', index=False)
 
     # TODO: plots
 
