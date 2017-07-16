@@ -294,6 +294,7 @@ export class AwsCloud implements Cloud {
       console.log(chalk.bold.blue(`> Machines deployed in [${region}]:`));
       for (let instance of instances) {
         console.log(chalk.bold.white(`> Instance id ${instance.InstanceId}`));
+        console.log(chalk.white(`    Status         : ${instance.State.Name}`));
         console.log(chalk.white(`    Ip Address     : ${instance.PublicIpAddress}`));
         console.log(chalk.white(`    Node Id        : ${AwsCloud.getInstanceNodeId(instance)}`));
         console.log(chalk.white(`    Is Tracker     : ${AwsCloud.isTracker(instance)}`));
