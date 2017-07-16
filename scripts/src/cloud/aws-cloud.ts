@@ -212,10 +212,12 @@ export class AwsCloud implements Cloud {
     for (let region of this.regions) {
       const instances = await this.getInstancesForRegion(region);
       for (let instance of instances) {
-        if (AwsCloud.isTracker(instance)) {
-          trackerInstance = instance;
-        } else {
-          nodeInstances.push(instance);
+        if (AwsCloud.belongToExperiment(instance, this.experimentName)) {
+          if (AwsCloud.isTracker(instance)) {
+            trackerInstance = instance;
+          } else {
+            nodeInstances.push(instance);
+          }
         }
       }
     }
@@ -282,6 +284,24 @@ export class AwsCloud implements Cloud {
       console.log(chalk.bold.red(`Error occurred`), err);
     }
   }
+
+  async runningMachines() {
+    await this.init();
+
+    console.log(chalk.blue(`> Searching EC2 machines...`));
+    for (let region of this.regions) {
+      const instances = await this.getInstancesForRegion(region);
+      console.log(chalk.bold.blue(`> Machines deployed in [${region}]:`));
+      for (let instance of instances) {
+        console.log(chalk.bold.white(`> Instance id ${instance.InstanceId}`));
+        console.log(chalk.white(`    Ip Address     : ${instance.PublicIpAddress}`));
+        console.log(chalk.white(`    Node Id        : ${AwsCloud.getInstanceNodeId(instance)}`));
+        console.log(chalk.white(`    Is Tracker     : ${AwsCloud.isTracker(instance)}`));
+        console.log(chalk.white(`    Experiment Name: ${AwsCloud.getInstanceExperiment(instance)}`));
+      }
+    }
+  }
+
 
   // /////////////////////////////////////////////
   //  Utils
@@ -406,6 +426,16 @@ export class AwsCloud implements Cloud {
   private static getInstanceNodeId(instance: Instance): string {
     const ids = instance.Tags.filter(t => t.Key === 'id').map(e => e.Value);
     return ids.length > 0 ? ids[0] : '';
+  }
+
+  /**
+   * Get the name of the experiment to which is assigned the EC2 machine.
+   * @param instance Instance.
+   * @return {string} Experiment name.
+   */
+  private static getInstanceExperiment(instance: Instance): string {
+    const exps = instance.Tags.filter(t => t.Key === 'experiment').map(e => e.Value);
+    return exps.length > 0 ? exps[0] : '';
   }
 
   /**

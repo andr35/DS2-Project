@@ -4,4 +4,5 @@ export interface Cloud {
   shutdown();
   downloadReport();
   watchTrackerLogs();
+  runningMachines();
 }

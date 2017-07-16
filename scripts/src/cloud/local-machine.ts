@@ -27,8 +27,12 @@ export class LocalMachine implements Cloud {
             NODES: this.options.nodes,
             DURATION: this.options.duration,
             EXPERIMENTS: this.options.experiments,
+            REPETITIONS: this.options.repetitions,
             INITIAL_SEED: this.options.initialSeed,
-            REPORT_PATH: this.options.reportPath
+            REPORT_PATH: this.options.reportPath,
+            TIME_BETWEEN_EXPERIMENTS: this.options.timeBetweenExperiments || 5000,
+            MIN_FAILURE_ROUNDS: this.options.minFailureRounds,
+            MAX_FAILURE_ROUNDS: this.options.maxFailureRounds
           }
         });
 
@@ -63,6 +67,11 @@ export class LocalMachine implements Cloud {
 
   watchTrackerLogs(): void {
     console.log(chalk.yellow('Cannot watch tracker logs in local.'));
+    process.exit(-1);
+  }
+
+  runningMachines(): void {
+    console.log(chalk.yellow('Cannot list running machines in local.'));
     process.exit(-1);
   }
 }

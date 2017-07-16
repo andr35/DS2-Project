@@ -5,6 +5,9 @@ export interface Options {
   repetitions?: number;
   initialSeed?: number;
   reportPath?: string;
+  timeBetweenExperiments?: number;
+  minFailureRounds?: number;
+  maxFailureRounds?: number;
 
   local?: boolean;
   keys?: string;

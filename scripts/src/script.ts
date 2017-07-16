@@ -27,6 +27,9 @@ export class Script {
       .option('-e --experiments <n>', 'Number of experiments', parseNumericOption)
       .option('-z --repetitions <n>', 'Repeat experiment n times', parseNumericOption)
       .option('-i --initial-seed <n>', 'Initial seed', parseNumericOption)
+      .option('-t --time-between-experiments <n>', 'Time between experiments', parseNumericOption)
+      .option('-m --min-failure-rounds <n>', 'Min number of rounds of gossip after which a node should be considered failed', parseNumericOption)
+      .option('-m --max-failure-rounds <n>', 'Max number of rounds of gossip after which a node should be considered failed', parseNumericOption)
       .option('-r --report-path <n>', 'Report path for the tracker')
       .option('-l --local', 'Start experiment locally')
       .action((extraArg: string, options: any) => this.start(extraArg, {...options, ...options.parent}));
@@ -47,6 +50,11 @@ export class Script {
       .command('watch <experiment-name>')
       .description('Download reports from a tracker')
       .action((extraArg: string, options: any) => this.watch(extraArg, {...options, ...options.parent}));
+
+    program
+      .command('list')
+      .description('List all running machines')
+      .action((options: any) => this.list({...options, ...options.parent}));
   }
 
   //noinspection JSMethodCanBeStatic
@@ -109,6 +117,14 @@ export class Script {
     new AwsCloud(experimentName, options).watchTrackerLogs();
   }
 
+  //noinspection JSMethodCanBeStatic
+  private list(options: Options) {
+    // Check for options
+    Script.checkCloudKeysPassed(options);
+    console.info(chalk.bold.blue('> Listing cloud machines...'));
+    new AwsCloud(null, options).runningMachines();
+  }
+
   // /////////////////////////////////////////////////
   //  Utilities
   // /////////////////////////////////////////////////
@@ -153,12 +169,12 @@ export class Script {
         });
       }
 
-      if (!options.initialSeed) {
+      if (!options.initialSeed && options.initialSeed < 0) {
         prompts.push({
           type: 'input',
           name: 'initialSeed',
           message: 'Initial seed?',
-          validate: input => greaterThanZero(input)
+          validate: input => greaterThanZeroIncluded(input)
         });
       }
 
@@ -207,7 +223,7 @@ export class Script {
 
 function parseNumericOption(value: any) {
   const n = parseInt(value);
-  return (isNaN(n) || n <= 0) ? undefined : n;
+  return (isNaN(n) || n <= 0) ? 0 : n;
 }
 
 function greaterThanZero(value: string) {
@@ -216,6 +232,13 @@ function greaterThanZero(value: string) {
   }
   if (+value <= 0) {
     return 'Value must be greater than zero.';
+  }
+  return true;
+}
+
+function greaterThanZeroIncluded(value: string) {
+  if (!( +value % 1 === 0)) {
+    return 'Value is not an integer';
   }
   return true;
 }
