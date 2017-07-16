@@ -15,7 +15,8 @@ import java.util.stream.IntStream;
 public final class Experiment {
 
 	// generate a new random experiment
-	public static Experiment generate(Set<String> nodes, boolean pullByGossip, int duration, int seed, int repetition) {
+	public static Experiment generate(Set<String> nodes, boolean pullByGossip, int duration, int seed, int repetitions,
+									  long gossipDelta, long failureDelta) {
 		final Random random = new Random(seed);
 
 		// number of nodes
@@ -35,15 +36,13 @@ public final class Experiment {
 		final List<ExpectedCrash> expectedCrashes = IntStream.of(crashes)
 			.boxed()
 			.map(permutation::get)
-			.map(node -> new ExpectedCrash((long) random.nextInt(duration / 3), node))  // TODO: remove /3
-			// TODO: crash WELL before duration - failureDelta?
+			.map(node -> new ExpectedCrash((long) random.nextInt(duration / 2), node))
 			.collect(Collectors.toList());
 
 		// return the experiment
 		final String id = String.format("nodes-%d__pushpull-%b__duration-%d__seed-%d__repetition-%d",
-			numberOfNodes, pullByGossip, duration, seed, repetition);
-		return new Experiment(id, numberOfNodes, pullByGossip, duration, expectedCrashes,
-			500, 6000,
+			numberOfNodes, pullByGossip, duration, seed, repetitions);
+		return new Experiment(id, numberOfNodes, pullByGossip, duration, expectedCrashes, gossipDelta, failureDelta,
 			true, 2, 10, 1);
 		// TODO: proper input of gossipDelta, failureDelta, catastrophe, multicastParam, multicastMaxWait and pickStrategy
 	}
@@ -131,7 +130,7 @@ public final class Experiment {
 		return failureDelta;
 	}
 
-	public boolean iscatastrophe() {
+	public boolean isCatastrophe() {
 		return catastrophe;
 	}
 
@@ -212,6 +211,7 @@ public final class Experiment {
 				.add("failure_delta", failureDelta)
 				.add("multicast_parameter", multicastParam)
 				.add("multicast_max_wait", multicastMaxWait)
+				.add("catastrophe", catastrophe)
 			)
 			.add("result", Json.createObjectBuilder()
 				.add("start_time", start)
@@ -231,7 +231,7 @@ public final class Experiment {
 
 	@Override
 	public String toString() {
-		return String.format("nodes=%d, duration=%dms, push_pull=%s, expected_crashes=%d",
-			numberOfNodes, duration, pushPull, expectedCrashes.size());
+		return String.format("nodes=%d, duration=%dms, push_pull=%s, expected_crashes=%d, gossip_delta=%d, failure_delta=%d",
+			numberOfNodes, duration, pushPull, expectedCrashes.size(), gossipDelta, failureDelta);
 	}
 }

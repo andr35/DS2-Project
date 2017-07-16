@@ -7,6 +7,7 @@ import akka.event.DiagnosticLoggingAdapter;
 import akka.event.Logging;
 import akka.japi.Creator;
 import com.typesafe.config.Config;
+import com.typesafe.config.ConfigException;
 import com.typesafe.config.ConfigFactory;
 import it.unitn.ds2.gsfd.experiment.ExpectedCrash;
 import it.unitn.ds2.gsfd.experiment.Experiment;
@@ -163,23 +164,37 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 	 */
 	private void onReady() {
 
+		// extract participants' ids
+		final Set<String> ids = nodes.stream().map(this::idFromRef).collect(Collectors.toSet());
+
 		// load the configuration
 		final int duration = config.getInt("tracker.duration");
 		final int numberOfExperiments = config.getInt("tracker.number-of-experiments");
 		final int repetitions = config.getInt("tracker.repetitions");
 		final int seed = config.getInt("tracker.initial-seed");
+		final long gossipDelta = config.getLong("tracker.gossip-delta");
+		final int minFailureRounds = config.getInt("tracker.min-failure-rounds");
 
-		// extract participants' ids
-		final Set<String> ids = nodes.stream().map(this::idFromRef).collect(Collectors.toSet());
+		// by default, make parametric tests for fail-time multiple of the gossip-time
+		int maxFailureRounds;
+		try {
+			maxFailureRounds = config.getInt("tracker.max-failure-rounds");
+		} catch (ConfigException.Missing e) {
+			maxFailureRounds = (int) Math.ceil(ids.size() / 3.0);
+		}
 
 		// generate the experiments
 		this.experiments = new ArrayList<>(numberOfExperiments * repetitions);
 		for (int i = 0; i < repetitions; i++) {
 			for (int j = 0; j < numberOfExperiments; j++) {
-				final Experiment experimentPushOnly = Experiment.generate(ids, false, duration, j + seed, i);
-				this.experiments.add(experimentPushOnly);
-				final Experiment experimentPushPull = Experiment.generate(ids, true, duration, j + seed, i);
-				this.experiments.add(experimentPushPull);
+				for (long rounds = minFailureRounds; rounds <= maxFailureRounds; rounds++) {
+					final Experiment experimentPushOnly = Experiment.generate(ids, false, duration,
+						j + seed, i, gossipDelta, gossipDelta * rounds);
+					this.experiments.add(experimentPushOnly);
+					final Experiment experimentPushPull = Experiment.generate(ids, true, duration,
+						j + seed, i, gossipDelta, gossipDelta * rounds);
+					this.experiments.add(experimentPushPull);
+				}
 			}
 		}
 
@@ -218,9 +233,11 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		nodes.forEach(node -> {
 			final String id = idFromRef(node);
 			if (crashesByNode.containsKey(id)) {
-				node.tell(StartExperiment.crash(current.isPushPull(), crashesByNode.get(id), nodes, gossipTime, failTime, current.iscatastrophe(), multicastParam, multicastMaxWait, pickStrategy), getSelf());
+				node.tell(StartExperiment.crash(current.isPushPull(), crashesByNode.get(id), nodes, gossipTime,
+					failTime, current.isCatastrophe(), multicastParam, multicastMaxWait, pickStrategy), getSelf());
 			} else {
-				node.tell(StartExperiment.normal(current.isPushPull(), nodes, gossipTime, failTime, current.iscatastrophe(), multicastParam, multicastMaxWait, pickStrategy), getSelf());
+				node.tell(StartExperiment.normal(current.isPushPull(), nodes, gossipTime, failTime,
+					current.isCatastrophe(), multicastParam, multicastMaxWait, pickStrategy), getSelf());
 			}
 		});
 
@@ -299,7 +316,5 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		} else {
 			log.error("Crash report outside an experiment... there must be an error!");
 		}
-
-		// TODO: put in the start and stop the experiment number???
 	}
 }

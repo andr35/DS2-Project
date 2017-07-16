@@ -1,16 +1,16 @@
-import {EC2} from 'aws-sdk';
-import {Instance, RunInstancesRequest} from 'aws-sdk/clients/ec2';
-import {Cloud} from './cloud';
-import {Options} from '../common/options';
-import {CloudKeys} from '../common/cloud-keys';
+import * as aws from "aws-sdk";
+import {EC2} from "aws-sdk";
+import {Instance, RunInstancesRequest} from "aws-sdk/clients/ec2";
+import {Cloud} from "./cloud";
+import {Options} from "../common/options";
+import {CloudKeys} from "../common/cloud-keys";
 import {ProjectUtils} from "../common/utils";
 import {spawn} from "child_process";
-import * as aws from 'aws-sdk';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as chalk from 'chalk';
-import * as scp2 from 'scp2';
-import * as ssh2 from 'ssh2';
+import * as fs from "fs";
+import * as path from "path";
+import * as chalk from "chalk";
+import * as scp2 from "scp2";
+import * as ssh2 from "ssh2";
 
 interface EC2Machine {
   instance: Instance;
@@ -730,6 +730,7 @@ export class AwsCloud implements Cloud {
         (options.repetitions ? `REPETITIONS=${options.repetitions} ` : ``) +
         (options.initialSeed ? `INITIAL_SEED=${options.initialSeed} ` : ``) +
         (options.reportPath ? `REPORT_PATH=${options.reportPath} ` : ``) +
+        `TIME_BETWEEN_EXPERIMENTS=10000` +
         `java -jar ${ProjectUtils.JAR_NAME} tracker > ${ProjectUtils.EC2_LOG_PATH} &`;
     } else {
       return `HOST=${myIp} PORT=${10000 + id} ID=${id} java -jar ${ProjectUtils.JAR_NAME} node ${this.trackerIp} 10000 > ${ProjectUtils.EC2_LOG_PATH} &`;
