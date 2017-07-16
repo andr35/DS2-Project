@@ -180,7 +180,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		try {
 			maxFailureRounds = config.getInt("tracker.max-failure-rounds");
 		} catch (ConfigException.Missing e) {
-			maxFailureRounds = (int) Math.ceil(ids.size() / 3.0);
+			maxFailureRounds = (int) Math.ceil(ids.size() / 3.0) + 1;
 		}
 
 		// generate the experiments
