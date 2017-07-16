@@ -164,6 +164,9 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 	 */
 	private void onReady() {
 
+		// log for debug
+		log.warning("Generating experiments with {}", config.getObject("tracker").toString());
+
 		// extract participants' ids
 		final Set<String> ids = nodes.stream().map(this::idFromRef).collect(Collectors.toSet());
 
@@ -184,7 +187,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		}
 
 		// generate the experiments
-		this.experiments = new ArrayList<>(numberOfExperiments * repetitions);
+		this.experiments = new ArrayList<>();
 		for (int i = 0; i < repetitions; i++) {
 			for (int j = 0; j < numberOfExperiments; j++) {
 				for (long rounds = minFailureRounds; rounds <= maxFailureRounds; rounds++) {
@@ -226,7 +229,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		final int pickStrategy = current.getPickStrategy();
 
 		// log the start of the experiment...
-		log.warning("StartExperiment experiment {} of {} [{}]", index + 1, experiments.size(), current.toString());
+		log.warning("Start experiment {} of {} [{}]", index + 1, experiments.size(), current.toString());
 
 		// start the experiment
 		current.start();
