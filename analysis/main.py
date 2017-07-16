@@ -7,6 +7,10 @@ import re
 import os
 import pandas
 import click
+import matplotlib as mpl
+
+mpl.use('Agg')
+import matplotlib.pyplot as plt
 
 # useful types
 NodeAndReporter = collections.namedtuple('NodeAndReporter', ['node', 'reporter'])
@@ -113,8 +117,16 @@ def parse_report(group, path):
         expected_delta = expected_crashes_map[node]
         assert delta >= expected_delta, 'expected delta is greater than delta for correctly detected crashes'
         delays.append(delta - expected_delta)
-    detect_time_average = statistics.mean(delays)
-    detect_time_stdev = statistics.stdev(delays)
+    try:
+        detect_time_average = statistics.mean(delays)
+    except statistics.StatisticsError:
+        click.echo('WARNING: experiment "%s" has no detected failures... set average to -1' % _id)
+        detect_time_average = -1
+    try:
+        detect_time_stdev = statistics.stdev(delays)
+    except statistics.StatisticsError:
+        click.echo('WARNING: experiment "%s" has only 0 or 1 detected failures... set st.dev to -1' % _id)
+        detect_time_stdev = -1
 
     # return the results
     return Experiment(
@@ -163,7 +175,9 @@ def analyze_results(base_path):
     for (directory_path, _, files) in os.walk(base_path):
         for file in files:
             if file.endswith('.json'):
-                group = re.search(re.escape(base_path) + re.escape(os.sep) + '(.+)', directory_path).group(1)
+                group = re.search(re.escape(base_path) + re.escape(os.sep) + '?(.*)', directory_path).group(1)
+                if group == '':
+                    group = '.'
                 path = directory_path + os.sep + file
 
                 # analyze the single report
@@ -172,6 +186,61 @@ def analyze_results(base_path):
 
     # return the result as a Pandas frame
     return pandas.DataFrame.from_records(results, columns=Experiment._fields)
+
+
+def plot_average_detect_time(path, frame):
+    """
+    Plot a graph with the relationship between failure-time and performances.
+    :param path: Path where to store the plot.
+    :param frame: Pandas frame with all the data.
+    """
+
+    # TODO: handle different number of nodes!
+
+    # aggregate
+    aggregation = frame.groupby(['push_pull', 'failure_delta'], as_index=False).agg(
+        {
+            'correct': {
+                'aggregated_correct': (lambda column: False not in list(column))
+            },
+            'detect_time_average': {
+                'aggregated_detect_time_average': 'sum'
+            }
+        }
+    )
+    aggregation.columns = aggregation.columns.droplevel(1)
+
+    # create the figure
+    figure = plt.figure()
+    ax = figure.add_subplot(111)
+
+    # 2 lines: PUSH and PUSH_PULL
+    push_frame_ok = aggregation.query('correct == True and push_pull == False')
+    push_ok = (push_frame_ok['failure_delta'], push_frame_ok['detect_time_average'])
+    push_pull_frame_ok = aggregation.query('correct == True and push_pull == True')
+    push_pull_ok = (push_pull_frame_ok['failure_delta'], push_pull_frame_ok['detect_time_average'])
+
+    push_frame_ko = aggregation.query('correct == False and push_pull == False')
+    push_ko = (push_frame_ko['failure_delta'], push_frame_ko['detect_time_average'])
+    push_pull_frame_ko = aggregation.query('correct == False and push_pull == True')
+    push_pull_ko = (push_pull_frame_ko['failure_delta'], push_pull_frame_ko['detect_time_average'])
+
+    ax.plot(push_ok[0] / 1000, push_ok[1] / 1000, label='push [correct]', marker='o')
+    ax.plot(push_ko[0] / 1000, push_ko[1] / 1000, label='push [wrong]', marker='x')
+    ax.plot(push_pull_ok[0] / 1000, push_pull_ok[1] / 1000, label='push_pull [correct]', marker='o')
+    ax.plot(push_pull_ko[0] / 1000, push_pull_ko[1] / 1000, label='push_pull [wrong]', marker='x')
+
+    # labels, title, axes
+    ax.legend(shadow=True)
+    ax.set_title('Average Detection Time')
+    ax.set_xlabel('Failure Time (s)')
+    ax.set_ylabel('Detection Time (s)')
+    ax.tick_params(axis='both', which='major')
+    ax.grid(True)
+
+    # save plot
+    figure.savefig(path, bbox_inches='tight')
+    plt.close(figure)
 
 
 @click.command()
@@ -191,7 +260,8 @@ def main(reports_path, output_path):
     frame = analyze_results(reports_path)
     frame.to_csv(output_path + os.sep + 'results.csv', index=False)
 
-    # TODO: plots
+    # plot 1: average detection time
+    plot_average_detect_time(output_path + os.sep + 'detect_time.png', frame)
 
 
 # entry point for the script
