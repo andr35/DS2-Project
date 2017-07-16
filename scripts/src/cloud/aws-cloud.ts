@@ -754,13 +754,15 @@ export class AwsCloud implements Cloud {
   private getStartProjectCmd(id: number, options: Options, myIp: string, tracker?: boolean): string {
     if (tracker) {
       return `HOST=${myIp} PORT=10000 ` +
-        (options.nodes ? `NODES=${options.nodes} ` : ``) +
-        (options.duration ? `DURATION=${options.duration} ` : ``) +
-        (options.experiments ? `EXPERIMENTS=${options.experiments} ` : ``) +
-        (options.repetitions ? `REPETITIONS=${options.repetitions} ` : ``) +
-        (options.initialSeed ? `INITIAL_SEED=${options.initialSeed} ` : ``) +
-        (options.reportPath ? `REPORT_PATH=${options.reportPath} ` : ``) +
-        `TIME_BETWEEN_EXPERIMENTS=10000 ` +
+        (options.nodes !== undefined ? `NODES=${options.nodes} ` : ``) +
+        (options.duration !== undefined ? `DURATION=${options.duration} ` : ``) +
+        (options.experiments !== undefined ? `EXPERIMENTS=${options.experiments} ` : ``) +
+        (options.repetitions !== undefined ? `REPETITIONS=${options.repetitions} ` : ``) +
+        (options.initialSeed !== undefined ? `INITIAL_SEED=${options.initialSeed} ` : ``) +
+        (options.reportPath !== undefined ? `REPORT_PATH=${options.reportPath} ` : ``) +
+        (options.minFailureRounds !== undefined ? `MIN_FAILURE_ROUNDS=${options.minFailureRounds} ` : ``) +
+        (options.maxFailureRounds !== undefined ? `MAX_FAILURE_ROUNDS=${options.maxFailureRounds} ` : ``) +
+        (options.timeBetweenExperiments !== undefined ? `TIME_BETWEEN_EXPERIMENTS=${options.timeBetweenExperiments} ` : ``) +
         `java -jar ${ProjectUtils.JAR_NAME} tracker > ${ProjectUtils.EC2_LOG_PATH} &`;
     } else {
       return `HOST=${myIp} PORT=${10000 + id} ID=${id} java -jar ${ProjectUtils.JAR_NAME} node ${this.trackerIp} 10000 > ${ProjectUtils.EC2_LOG_PATH} &`;
