@@ -6,6 +6,7 @@ import statistics
 import re
 import os
 import pandas
+import click
 
 # useful types
 NodeAndReporter = collections.namedtuple('NodeAndReporter', ['node', 'reporter'])
@@ -179,17 +180,17 @@ def analyze_results(base_path):
     return pandas.DataFrame.from_records(results, columns=Experiment._fields)
 
 
-def main():
+@click.command()
+@click.option('--reports-path', help='Base path where to find the reports.', prompt=True)
+def main(reports_path):
     """
     Analyze the results of the experiments and produces
     useful plots to include in the final report.
     """
 
-    # TODO: command line
-
     # analyze the results
-    frame = analyze_results('old_data')
-    print(frame.to_csv(index=False))
+    frame = analyze_results(reports_path)
+    click.echo(frame.to_csv(index=False))
 
     # TODO: plots
 
