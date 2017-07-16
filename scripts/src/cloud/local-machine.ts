@@ -1,10 +1,15 @@
-import {spawn} from 'child_process';
-import * as chalk from 'chalk';
-import {Cloud} from './cloud';
-import {ProjectUtils} from '../common/utils';
-import {Options} from '../common/options';
+import {spawn} from "child_process";
+import * as chalk from "chalk";
+import {Cloud} from "./cloud";
+import {ProjectUtils} from "../common/utils";
+import {Options} from "../common/options";
 
 export class LocalMachine implements Cloud {
+
+  private static removeUndefined(obj: Object): Object {
+    Object.keys(obj).forEach(key => obj[key] === undefined && delete obj[key]);
+    return obj;
+  }
 
   constructor(private options: Options) {
   }
@@ -23,7 +28,7 @@ export class LocalMachine implements Cloud {
         // First start the  tracker node
         console.info(chalk.bold.green('> Start Tracker node...'));
         const tracker = spawn('java', ['-jar', ProjectUtils.JAR_NAME, 'tracker'], {
-          ...spawnOptions, env: {
+          ...spawnOptions, env: LocalMachine.removeUndefined({
             NODES: this.options.nodes,
             DURATION: this.options.duration,
             EXPERIMENTS: this.options.experiments,
@@ -33,7 +38,7 @@ export class LocalMachine implements Cloud {
             TIME_BETWEEN_EXPERIMENTS: this.options.timeBetweenExperiments || 5000,
             MIN_FAILURE_ROUNDS: this.options.minFailureRounds,
             MAX_FAILURE_ROUNDS: this.options.maxFailureRounds
-          }
+          })
         });
 
         // Start nodes with a delay
