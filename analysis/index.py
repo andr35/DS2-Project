@@ -112,17 +112,6 @@ def parse_report(group, path):
     detect_time_average = statistics.mean(delays)
     detect_time_stdev = statistics.stdev(delays)
 
-    # print('# nodes: %d' % n_nodes)
-    # print('# scheduled: %d' % n_scheduled)
-    # print('')
-    # print('# expected: %d' % n_expected_detected)
-    # print('# detected: %d (%f)' % (n_detected, rate_detected_crashes))
-    # print('# duplicated: %d' % n_duplicated)
-    # print('# wrong: %d' % n_wrong)
-    # print('')
-    # print('# time [average]: %.2f s' % (detect_time_average / 1000))
-    # print('# time [st.dev]: %.2f s' % (detect_time_stdev / 1000))
-
     # return the results
     return Experiment(
 
