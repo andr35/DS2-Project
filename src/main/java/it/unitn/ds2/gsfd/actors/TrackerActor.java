@@ -196,8 +196,6 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 
 						// use different strategies (push vs push_pull, how to select the nodes)
 						for (boolean pushPull : new boolean[]{false, true}) {
-
-							// TODO: replace with enum
 							for (int pickStrategy = 0; pickStrategy < 3; pickStrategy++) {
 
 								// should the node enable the protocol to resist to catastrophes
