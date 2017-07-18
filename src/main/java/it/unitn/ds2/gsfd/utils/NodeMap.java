@@ -70,12 +70,9 @@ public final class NodeMap {
 		}
 	}
 
-
 	public Set<ActorRef> getUpdatableNodes() {
 		Set<ActorRef> updatables = new HashSet<>(correctNodes);
-		for (ActorRef ref : missingNodes){
-				updatables.add(ref);
-		}
+		updatables.addAll(missingNodes);
 		return updatables;
 	}
 
@@ -98,34 +95,36 @@ public final class NodeMap {
 	@Nullable
 	public ActorRef pickNode(int strategy) {
 
-		if (correctNodes.isEmpty()) return null;
+		if (correctNodes.isEmpty()) {
+			return null;
+		}
 
-		List<ActorRef> correctList = new ArrayList<>(correctNodes);
+		final List<ActorRef> correctList = new ArrayList<>(correctNodes);
 
 		if (strategy < 0 || strategy > 2) {
-			throw new java.lang.RuntimeException("pickNode strategy unexpected (" + strategy + ")");
+			throw new RuntimeException("pickNode strategy unexpected (" + strategy + ")");
 		}
 
 		// with strategy 0 all nodes have the same probability
 		// we can directly return a random node
 		if (strategy == 0) {
-			Random r = new Random();
-			int randomIndex = r.nextInt(correctList.size());
+			final Random r = new Random();
+			final int randomIndex = r.nextInt(correctList.size());
 			return correctList.get(randomIndex);
 		}
 
-		List<ActorRef> candidates = new ArrayList<>(nodes.keySet());
+		final List<ActorRef> candidates = new ArrayList<>(nodes.keySet());
 		candidates.retainAll(correctList);
 
 		// compute in advance a score for each node (will alter probability of it being chosen).
 		// the +1 guarantees every node has a chance to be chosen
-		// TODO: more complex function (possibly by experiment setting)
-		List<Long> nodeScores = new ArrayList<>();
+		final List<Long> nodeScores = new ArrayList<>();
 		for (int i = 0; i < candidates.size(); i++) {
-			if (strategy == 1)
+			if (strategy == 1) {
 				nodeScores.add(i, nodes.get(candidates.get(i)).getQuiescence() + 1);
-			else if (strategy == 2)
+			} else if (strategy == 2) {
 				nodeScores.add(i, (long) Math.pow(nodes.get(candidates.get(i)).getQuiescence(), 2) + 1);
+			}
 		}
 
 		// generate a random number whose value ranges from 0.0 to the sum
@@ -134,7 +133,7 @@ public final class NodeMap {
 		for (int i = 0; i < candidates.size(); i++) {
 			randomMultiplier += nodeScores.get(i);
 		}
-		Random r = new Random();
+		final Random r = new Random();
 		double randomDouble = r.nextDouble() * randomMultiplier;
 
 		// subtract function in terms of i to the total until negative value is reached
@@ -149,5 +148,4 @@ public final class NodeMap {
 
 		return candidates.get(k);
 	}
-
 }
