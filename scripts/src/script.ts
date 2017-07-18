@@ -29,7 +29,8 @@ export class Script {
       .option('-i --initial-seed <n>', 'Initial seed', parseNumericOption)
       .option('-t --time-between-experiments <n>', 'Time between experiments', parseNumericOption)
       .option('-m --min-failure-rounds <n>', 'Min number of rounds of gossip after which a node should be considered failed', parseNumericOption)
-      .option('-m --max-failure-rounds <n>', 'Max number of rounds of gossip after which a node should be considered failed', parseNumericOption)
+      .option('-o --max-failure-rounds <n>', 'Max number of rounds of gossip after which a node should be considered failed', parseNumericOption)
+      .option('-f --miss-delta-rounds <n>', 'Number of delta rounds to calculate the miss time', parseNumericOption)
       .option('-r --report-path <n>', 'Report path for the tracker')
       .option('-l --local', 'Start experiment locally')
       .action((extraArg: string, options: any) => this.start(extraArg, {...options, ...options.parent}));
@@ -160,11 +161,29 @@ export class Script {
         });
       }
 
-      if (!options.repetitions) {
+      if (!options.minFailureRounds) {
         prompts.push({
           type: 'input',
-          name: 'repetitions',
-          message: 'How many time repeat the experiments?',
+          name: 'minFailureRounds',
+          message: 'Min number of rounds of gossip after which a node should be considered failed',
+          validate: input => greaterThanZero(input)
+        });
+      }
+
+      if (!options.maxFailureRounds) {
+        prompts.push({
+          type: 'input',
+          name: 'maxFailureRounds',
+          message: 'Max number of rounds of gossip after which a node should be considered failed',
+          validate: input => greaterThanZero(input)
+        });
+      }
+
+      if (!options.missDeltaRounds) {
+        prompts.push({
+          type: 'input',
+          name: 'missDeltaRounds',
+          message: 'Number of delta rounds to calculate the miss time',
           validate: input => greaterThanZero(input)
         });
       }

@@ -6,6 +6,7 @@ export interface Options {
   initialSeed?: number;
   reportPath?: string;
   timeBetweenExperiments?: number;
+  missDeltaRounds?: number;
   minFailureRounds?: number;
   maxFailureRounds?: number;
 

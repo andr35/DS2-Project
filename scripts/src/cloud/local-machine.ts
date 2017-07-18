@@ -37,7 +37,8 @@ export class LocalMachine implements Cloud {
             REPORT_PATH: this.options.reportPath,
             TIME_BETWEEN_EXPERIMENTS: this.options.timeBetweenExperiments || 5000,
             MIN_FAILURE_ROUNDS: this.options.minFailureRounds,
-            MAX_FAILURE_ROUNDS: this.options.maxFailureRounds
+            MAX_FAILURE_ROUNDS: this.options.maxFailureRounds,
+            MISS_DELTA_ROUNDS: this.options.missDeltaRounds
           })
         });
 

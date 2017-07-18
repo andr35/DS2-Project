@@ -764,6 +764,7 @@ export class AwsCloud implements Cloud {
         (options.minFailureRounds !== undefined ? `MIN_FAILURE_ROUNDS=${options.minFailureRounds} ` : ``) +
         (options.maxFailureRounds !== undefined ? `MAX_FAILURE_ROUNDS=${options.maxFailureRounds} ` : ``) +
         (options.timeBetweenExperiments !== undefined ? `TIME_BETWEEN_EXPERIMENTS=${options.timeBetweenExperiments} ` : ``) +
+        (options.missDeltaRounds !== undefined ? ` MISS_DELTA_ROUNDS=${options.missDeltaRounds} ` : ``) +
         `java -jar ${ProjectUtils.JAR_NAME} tracker > ${ProjectUtils.EC2_LOG_PATH} &`;
     } else {
       return `HOST=${myIp} PORT=${10000 + id} ID=${id} java -jar ${ProjectUtils.JAR_NAME} node ${this.trackerIp} 10000 > ${ProjectUtils.EC2_LOG_PATH} &`;
