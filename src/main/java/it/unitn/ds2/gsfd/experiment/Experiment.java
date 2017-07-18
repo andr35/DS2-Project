@@ -218,6 +218,7 @@ public final class Experiment {
 				.add("push_pull", pushPull)
 				.add("gossip_delta", gossipDelta)
 				.add("failure_delta", failureDelta)
+				.add("miss_delta", missDelta)
 				.add("multicast_parameter", multicastParam)
 				.add("multicast_max_wait", multicastMaxWait)
 				.add("catastrophe", catastrophe)
