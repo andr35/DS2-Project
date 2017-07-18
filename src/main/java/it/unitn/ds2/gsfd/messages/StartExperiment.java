@@ -179,11 +179,11 @@ public final class StartExperiment implements Serializable {
 			Objects.requireNonNull(nodes);
 			Objects.requireNonNull(gossipDelta);
 			Objects.requireNonNull(failureDelta);
-			Objects.requireNonNull(missDelta);
 			Objects.requireNonNull(pushPull);
 			Objects.requireNonNull(pickStrategy);
 			Objects.requireNonNull(enableMulticast);
 			if (enableMulticast) {
+				Objects.requireNonNull(missDelta);
 				Objects.requireNonNull(multicastParam);
 				Objects.requireNonNull(multicastMaxWait);
 			}

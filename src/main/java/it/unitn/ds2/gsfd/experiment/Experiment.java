@@ -116,6 +116,7 @@ public final class Experiment {
 		////////////////////////////////////////////////////////////////////
 		// initialization
 		////////////////////////////////////////////////////////////////////
+
 		this.id = id;
 		this.seed = builder.seed;
 		this.repetition = builder.repetition;
@@ -447,11 +448,11 @@ public final class Experiment {
 			Objects.requireNonNull(duration);
 			Objects.requireNonNull(gossipDelta);
 			Objects.requireNonNull(failureDelta);
-			Objects.requireNonNull(missDelta);
 			Objects.requireNonNull(pushPull);
 			Objects.requireNonNull(pickStrategy);
 			Objects.requireNonNull(enableMulticast);
 			if (enableMulticast) {
+				Objects.requireNonNull(missDelta);
 				Objects.requireNonNull(multicastParam);
 				Objects.requireNonNull(multicastMaxWait);
 			}
