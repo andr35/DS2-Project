@@ -259,7 +259,7 @@ export class AwsCloud implements Cloud {
         const sshConnection = new ssh2.Client();
         sshConnection.on('ready', async () => {
           console.log(chalk.green(`> SSH connection with "${trackerInstance.InstanceId}" (${trackerInstance.PublicIpAddress}) established.`));
-          sshConnection.exec('cat ' + ProjectUtils.EC2_LOG_PATH, (err, stream) => {
+          sshConnection.exec('tail -n 1000 ' + ProjectUtils.EC2_LOG_PATH, (err, stream) => {
             if (err) {
               throw err;
             } else {

@@ -180,17 +180,17 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		getContext().become(ready);
 
 		// set the gossip strategy
-		pullByGossip = msg.isPullByGossip();
+		pullByGossip = msg.isPushPull();
 
 		// schedule the crash if needed
-		final Long delta = msg.getDelta();
+		final Long delta = msg.getSimulateCrashAtDelta();
 		if (delta != null) {
 			selfCrashTimeout = sendToSelf(new SelfCrash(), delta);
 		}
 
 		// set times for timeouts
-		gossipTime = msg.getGossipTime();
-		failTime = msg.getFailTime();
+		gossipTime = msg.getGossipDelta();
+		failTime = msg.getFailureDelta();
 		cleanupTime = 2 * failTime;
 
 		// set the structures for nodes, and start timeouts
@@ -210,13 +210,13 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		pickStrategy = msg.getPickStrategy();
 
 		// setup for catastrophe recovery
-		catastrophe = msg.isCatastrophe();
+		catastrophe = msg.enableMulticast();
 		if (catastrophe) {
 			log.info("multicast is active");
 			multicastParam = msg.getMulticastParam();
 			multicastMaxWait = msg.getMulticastMaxWait();
 			multicastWait = 0;
-			missTime = failTime; // TODO: how to compute missTime?
+			missTime = msg.getMissDelta();
 
 			// schedule reminder to attempt multicast
 			multicastTimeout = sendToSelf(new CatastropheReminder(), 1000);
@@ -226,7 +226,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 		// debug
 		log.info("pick strategy: " + pickStrategy);
-		if (delta != null) log.info("onStart complete (faulty, crashes in " + msg.getDelta() + ")");
+		if (delta != null) log.info("onStart complete (faulty, crashes in " + msg.getSimulateCrashAtDelta() + ")");
 		else log.info("onStart complete (correct)");
 		log.debug("nodes: " + beatsToString(nodes.getBeats()));
 	}
@@ -252,9 +252,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		// increment node's own heartbeat counter
 		nodes.get(getSelf()).heartbeat();
 
-		// TODO: check that this works with the experiments (resetting quiescence)
 		// pick random correct node
-		ActorRef gossipNode = nodes.pickNode(pickStrategy);
+		final ActorRef gossipNode = nodes.pickNode(pickStrategy);
 		if (gossipNode != null) {
 
 			// gossip the beats to the random node
@@ -304,8 +303,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	 * @param msg Details with the node that is though to be crashed.
 	 */
 	private void onFail(Fail msg) {
-		ActorRef failing = msg.getFailing();
-		long failId = msg.getFailId();
+		final ActorRef failing = msg.getFailing();
+		final long failId = msg.getFailId();
 
 		// check if the Fail message was still valid
 		if (nodes.get(failing).getTimeoutId() == failId) {
@@ -315,7 +314,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 				nodes.setMissing(failing);
 
 				// give the system more time to decide if the node is failed
-				Miss missMsg = new Miss(failing, nodes.get(failing).getTimeoutId() + 1);
+				final Miss missMsg = new Miss(failing, nodes.get(failing).getTimeoutId() + 1);
 				nodes.get(failing).resetTimeout(sendToSelf(missMsg, missTime));
 				log.info("Node {} is missing", idFromRef(failing));
 			} else {
@@ -325,7 +324,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 				sendToTracker(new CrashReport(failing));
 
 				// schedule message to remove the node from the heartbeat map
-				Cleanup cleanMsg = new Cleanup(failing, nodes.get(failing).getTimeoutId() + 1);
+				final Cleanup cleanMsg = new Cleanup(failing, nodes.get(failing).getTimeoutId() + 1);
 				nodes.get(failing).resetTimeout(sendToSelf(cleanMsg, cleanupTime));
 				log.info("Node {} reported as failed", idFromRef(failing));
 			}
@@ -337,8 +336,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	}
 
 	private void onMiss(Miss msg) {
-		ActorRef missing = msg.getMissing();
-		long missId = msg.getMissId();
+		final ActorRef missing = msg.getMissing();
+		final long missId = msg.getMissId();
 
 		// check if the Miss message was still valid
 		if (nodes.get(missing).getTimeoutId() == missId) {
@@ -350,7 +349,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			sendToTracker(new CrashReport(missing));
 
 			// schedule cleanup
-			Cleanup cleanMsg = new Cleanup(missing, nodes.get(missing).getTimeoutId() + 1);
+			final Cleanup cleanMsg = new Cleanup(missing, nodes.get(missing).getTimeoutId() + 1);
 			nodes.get(missing).resetTimeout(sendToSelf(cleanMsg, cleanupTime));
 		}
 	}
@@ -362,8 +361,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	 * @param msg Details with the node that is to be completely removed.
 	 */
 	private void onCleanup(Cleanup msg) {
-		ActorRef failed = msg.getFailed();
-		long cleanId = msg.getCleanId();
+		final ActorRef failed = msg.getFailed();
+		final long cleanId = msg.getCleanId();
 
 		// check if the Cleanup message was still valid
 		if (nodes.get(failed).getTimeoutId() == cleanId) {
@@ -378,8 +377,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	private void sendMulticast() {
 
 		// evaluate probability of sending (send for sure if Wait = MaxWait)
-		double multicastProb = Math.pow((double) multicastWait / multicastMaxWait, multicastParam);
-		double rand = Math.random();
+		final double multicastProb = Math.pow((double) multicastWait / multicastMaxWait, multicastParam);
+		final double rand = Math.random();
 
 		if (rand < multicastProb) {
 
@@ -388,7 +387,6 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			multicastWait = 0;
 			multicast(new CatastropheMulticast(nodes.getBeats()));
 
-			// TODO: check that this works with the experiments (resetting quiescence)
 			// even the probability of gossip to any node
 			nodes.getUpdatableNodes().forEach(ref -> nodes.get(ref).resetQuiescence());
 			log.debug("multicast: " + beatsToString(nodes.getBeats()));
@@ -426,7 +424,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	private void updateBeats(Map<ActorRef, Long> gossipedBeats) {
 		nodes.getUpdatableNodes().forEach((ref) -> {
 			if (gossipedBeats.containsKey(ref)) {
-				long beat = gossipedBeats.get(ref);
+				final long beat = gossipedBeats.get(ref);
 
 				// if a higher heartbeat counter was gossiped, update it
 				if (beat > nodes.get(ref).getBeatCount()) {
@@ -439,7 +437,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 					nodes.unsetMissing(ref);
 
 					// restart the timeout
-					Fail failMsg = new Fail(ref, nodes.get(ref).getTimeoutId() + 1);
+					final Fail failMsg = new Fail(ref, nodes.get(ref).getTimeoutId() + 1);
 					nodes.get(ref).resetTimeout(sendToSelf(failMsg, failTime));
 				} else {
 

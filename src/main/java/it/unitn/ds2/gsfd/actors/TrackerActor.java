@@ -7,7 +7,6 @@ import akka.event.DiagnosticLoggingAdapter;
 import akka.event.Logging;
 import akka.japi.Creator;
 import com.typesafe.config.Config;
-import com.typesafe.config.ConfigException;
 import com.typesafe.config.ConfigFactory;
 import it.unitn.ds2.gsfd.experiment.ExpectedCrash;
 import it.unitn.ds2.gsfd.experiment.Experiment;
@@ -72,7 +71,6 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 
 	// json writer -> pretty json files
 	private final JsonWriterFactory jsonWriterFactory;
-
 
 	// constructor is private... use the Props factory
 	private TrackerActor() {
@@ -174,32 +172,94 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		final int duration = config.getInt("tracker.duration");
 		final int numberOfExperiments = config.getInt("tracker.number-of-experiments");
 		final int repetitions = config.getInt("tracker.repetitions");
-		final int seed = config.getInt("tracker.initial-seed");
+		final int initialSeed = config.getInt("tracker.initial-seed");
 		final long gossipDelta = config.getLong("tracker.gossip-delta");
 		final int minFailureRounds = config.getInt("tracker.min-failure-rounds");
-
-		// by default, make parametric tests for fail-time multiple of the gossip-time
-		int maxFailureRounds;
-		try {
-			maxFailureRounds = config.getInt("tracker.max-failure-rounds");
-		} catch (ConfigException.Missing e) {
-			maxFailureRounds = (int) Math.ceil(ids.size() / 3.0) + 1;
-		}
+		final int maxFailureRounds = config.getInt("tracker.max-failure-rounds");
+		final long missDelta = gossipDelta * config.getLong("tracker.miss-delta-rounds");
 
 		// generate the experiments
 		this.experiments = new ArrayList<>();
-		for (int i = 0; i < repetitions; i++) {
-			for (int j = 0; j < numberOfExperiments; j++) {
-				for (long rounds = minFailureRounds; rounds <= maxFailureRounds; rounds++) {
-					final Experiment experimentPushOnly = Experiment.generate(ids, false, duration,
-						j + seed, i, gossipDelta, gossipDelta * rounds);
-					this.experiments.add(experimentPushOnly);
-					final Experiment experimentPushPull = Experiment.generate(ids, true, duration,
-						j + seed, i, gossipDelta, gossipDelta * rounds);
-					this.experiments.add(experimentPushPull);
+
+		// use different seeds
+		for (int seed = initialSeed; seed < initialSeed + numberOfExperiments; seed++) {
+
+			// repeat each experiment some times
+			for (int repetition = 0; repetition < repetitions; repetition++) {
+
+				// should I crash only 1 node or 2/3 of them
+				for (boolean simulateCatastrophe : new boolean[]{false, true}) {
+
+					// use different values for failureDelta... multiples of gossipDelta
+					for (int round = maxFailureRounds; round >= minFailureRounds; round -= 2) {
+						final long failureDelta = gossipDelta * round;
+
+						// use different strategies (push vs push_pull, how to select the nodes)
+						for (boolean pushPull : new boolean[]{false, true}) {
+							for (int pickStrategy = 0; pickStrategy < 3; pickStrategy++) {
+
+								// should the node enable the protocol to resist to catastrophes
+								for (boolean enableMulticast : new boolean[]{false, true}) {
+
+									// build the experiment with the parameters used so far...
+									final Experiment.Builder builder = new Experiment.Builder()
+										.nodes(ids)
+										.seed(seed)
+										.repetition(repetition)
+										.simulateCatastrophe(simulateCatastrophe)
+										.duration(duration)
+										.gossipDelta(gossipDelta)
+										.failureDelta(failureDelta)
+										.missDelta(missDelta)
+										.pushPull(pushPull)
+										.pickStrategy(pickStrategy)
+										.enableMulticast(enableMulticast);
+
+									// only in case we enable the multicast, play with its parameters
+									if (enableMulticast) {
+
+										// try different max waits -> regulate the maximum expected time for the first a multicast
+										for (long maxWait : new long[]{failureDelta, 2 * failureDelta}) {
+
+											// try different values for the parameter a -> regulate the first expected multicast
+											for (double fractionOfFailTime : new double[]{1.0 / 3.0, 2.0 / 3.0}) {
+												final long expectedFirstMulticast = (long) fractionOfFailTime * failureDelta;
+												final double a = Experiment.findMulticastParameter(ids.size(), maxWait, expectedFirstMulticast);
+
+												// finally, generate the experiment
+												final Experiment experiment = builder
+													.multicastParam(a)
+													.multicastMaxWait(maxWait)
+													.build();
+
+												// and add it to the experiments
+												experiments.add(experiment);
+											}
+										}
+									}
+
+									// use fixed values
+									else {
+
+										// finally, generate the experiment
+										final Experiment experiment = builder
+											.multicastParam(null)
+											.multicastMaxWait(null)
+											.build();
+
+										// and add it to the experiments
+										experiments.add(experiment);
+									}
+								}
+							}
+						}
+					}
 				}
 			}
 		}
+
+		// log
+		log.warning("Generated {} experiments...", experiments.size());
 
 		// start the experiments
 		onExperimentStart(0);
@@ -222,11 +282,6 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		final List<ExpectedCrash> expectedCrashes = current.getExpectedCrashes();
 		final Map<String, Long> crashesByNode = expectedCrashes.stream()
 			.collect(Collectors.toMap(ExpectedCrash::getNode, ExpectedCrash::getDelta));
-		final long gossipTime = current.getGossipDelta();
-		final long failTime = current.getFailureDelta();
-		final double multicastParam = current.getMulticastParam();
-		final int multicastMaxWait = current.getMulticastMaxWait();
-		final int pickStrategy = current.getPickStrategy();
 
 		// log the start of the experiment...
 		log.warning("Start experiment {} of {} [{}]", index + 1, experiments.size(), current.toString());
@@ -234,14 +289,26 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		// start the experiment
 		current.start();
 		nodes.forEach(node -> {
+
+			// get the ID of this node (to check if it should crash or not)
 			final String id = idFromRef(node);
-			if (crashesByNode.containsKey(id)) {
-				node.tell(StartExperiment.crash(current.isPushPull(), crashesByNode.get(id), nodes, gossipTime,
-					failTime, current.isCatastrophe(), multicastParam, multicastMaxWait, pickStrategy), getSelf());
-			} else {
-				node.tell(StartExperiment.normal(current.isPushPull(), nodes, gossipTime, failTime,
-					current.isCatastrophe(), multicastParam, multicastMaxWait, pickStrategy), getSelf());
-			}
+
+			// description of the experiment to perform
+			final StartExperiment experiment = new StartExperiment.Builder()
+				.nodes(nodes)
+				.simulateCrashAtDelta(crashesByNode.getOrDefault(id, null))
+				.gossipDelta(current.getGossipDelta())
+				.failureDelta(current.getFailureDelta())
+				.missDelta(current.getMissDelta())
+				.pushPull(current.isPushPull())
+				.pickStrategy(current.getPickStrategy())
+				.enableMulticast(current.enableMulticast())
+				.multicastParam(current.getMulticastParam())
+				.multicastMaxWait(current.getMulticastMaxWait())
+				.build();
+
+			// ask the node to start the experiment
+			node.tell(experiment, getSelf());
 		});
 
 		// schedule the end of the experiment
