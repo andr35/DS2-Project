@@ -2,6 +2,15 @@ package it.unitn.ds2.gsfd.experiment;
 
 public class MulticastParamHelper {
 
+	/**
+	 * Helper that computes expected time of first multicast for a values
+	 * and finds multicastParam (a) that scores the closest time.
+	 *
+	 * @param n Number of nodes of the system.
+	 * @param maxWait Maximum number of times multicast can be postponed
+	 * @param expectedFirstMulticast Desired time of first multicast
+	 * @return Value a associated to the most accurate expected first multicast
+	 */
 	private static double findMulticastParam(int n, long maxWait, long expectedFirstMulticast) {
 		double aFirst = 1.0;
 		double aLast = 30.0; // maximum a to test, to guarantee termination
