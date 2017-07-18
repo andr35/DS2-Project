@@ -17,6 +17,10 @@ import java.util.stream.IntStream;
  */
 public final class Experiment {
 
+	// counter for the experiments -> used to generate the IDs
+	private static int COUNTER = 0;
+
+
 	// unique identifier for the experiment
 	private final String id;
 
@@ -78,14 +82,14 @@ public final class Experiment {
 
 	// private constructor -> use the builder instead
 	private Experiment(Builder builder) {
+		COUNTER++;
 
 		////////////////////////////////////////////////////////////////////
 		// generate the experiment
 		////////////////////////////////////////////////////////////////////
 
-		// TODO!
 		// generate an ID for the experiment
-		final String id = System.currentTimeMillis() + "_" + UUID.randomUUID().toString().replace("-", "");
+		final String id = String.format("%05d_%d", COUNTER, System.currentTimeMillis());
 
 		// number of nodes
 		final int numberOfNodes = builder.nodes.size();
