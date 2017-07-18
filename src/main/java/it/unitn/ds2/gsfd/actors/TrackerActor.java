@@ -228,7 +228,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 
 												// finally, generate the experiment
 												final Experiment experiment = builder
-													.multicastParam(a)
+													.multicastParam((double) a)
 													.multicastMaxWait(maxWait)
 													.build();
 
@@ -243,8 +243,8 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 
 										// finally, generate the experiment
 										final Experiment experiment = builder
-											.multicastParam(0)
-											.multicastMaxWait(0)
+											.multicastParam(null)
+											.multicastMaxWait(null)
 											.build();
 
 										// and add it to the experiments
@@ -282,12 +282,6 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		final List<ExpectedCrash> expectedCrashes = current.getExpectedCrashes();
 		final Map<String, Long> crashesByNode = expectedCrashes.stream()
 			.collect(Collectors.toMap(ExpectedCrash::getNode, ExpectedCrash::getDelta));
-		final long gossipTime = current.getGossipDelta();
-		final long failTime = current.getFailureDelta();
-		final long missTime = current.getMissDelta();
-		final double multicastParam = current.getMulticastParam();
-		final int multicastMaxWait = current.getMulticastMaxWait();
-		final int pickStrategy = current.getPickStrategy();
 
 		// log the start of the experiment...
 		log.warning("Start experiment {} of {} [{}]", index + 1, experiments.size(), current.toString());
@@ -295,14 +289,26 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		// start the experiment
 		current.start();
 		nodes.forEach(node -> {
+
+			// get the ID of this node (to check if it should crash or not)
 			final String id = idFromRef(node);
-			if (crashesByNode.containsKey(id)) {
-				node.tell(StartExperiment.crash(current.isPushPull(), crashesByNode.get(id), nodes, gossipTime,
-					failTime, current.isEnableMulticast(), missTime, multicastParam, multicastMaxWait, pickStrategy), getSelf());
-			} else {
-				node.tell(StartExperiment.normal(current.isPushPull(), nodes, gossipTime, failTime,
-					current.isEnableMulticast(), missTime, multicastParam, multicastMaxWait, pickStrategy), getSelf());
-			}
+
+			// description of the experiment to perform
+			final StartExperiment experiment = new StartExperiment.Builder()
+				.nodes(nodes)
+				.simulateCrashAtDelta(crashesByNode.getOrDefault(id, null))
+				.gossipDelta(current.getGossipDelta())
+				.failureDelta(current.getFailureDelta())
+				.missDelta(current.getMissDelta())
+				.pushPull(current.isPushPull())
+				.pickStrategy(current.getPickStrategy())
+				.enableMulticast(current.enableMulticast())
+				.multicastParam(current.getMulticastParam())
+				.multicastMaxWait(current.getMulticastMaxWait())
+				.build();
+
+			// ask the node to start the experiment
+			node.tell(experiment, getSelf());
 		});
 
 		// schedule the end of the experiment

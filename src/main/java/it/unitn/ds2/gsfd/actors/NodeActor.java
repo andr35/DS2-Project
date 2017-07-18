@@ -180,17 +180,17 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		getContext().become(ready);
 
 		// set the gossip strategy
-		pullByGossip = msg.isPullByGossip();
+		pullByGossip = msg.isPushPull();
 
 		// schedule the crash if needed
-		final Long delta = msg.getDelta();
+		final Long delta = msg.getSimulateCrashAtDelta();
 		if (delta != null) {
 			selfCrashTimeout = sendToSelf(new SelfCrash(), delta);
 		}
 
 		// set times for timeouts
-		gossipTime = msg.getGossipTime();
-		failTime = msg.getFailTime();
+		gossipTime = msg.getGossipDelta();
+		failTime = msg.getFailureDelta();
 		cleanupTime = 2 * failTime;
 
 		// set the structures for nodes, and start timeouts
@@ -210,13 +210,13 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		pickStrategy = msg.getPickStrategy();
 
 		// setup for catastrophe recovery
-		catastrophe = msg.isCatastrophe();
+		catastrophe = msg.enableMulticast();
 		if (catastrophe) {
 			log.info("multicast is active");
 			multicastParam = msg.getMulticastParam();
 			multicastMaxWait = msg.getMulticastMaxWait();
 			multicastWait = 0;
-			missTime = msg.getMissTime();
+			missTime = msg.getMissDelta();
 
 			// schedule reminder to attempt multicast
 			multicastTimeout = sendToSelf(new CatastropheReminder(), 1000);
@@ -226,7 +226,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 		// debug
 		log.info("pick strategy: " + pickStrategy);
-		if (delta != null) log.info("onStart complete (faulty, crashes in " + msg.getDelta() + ")");
+		if (delta != null) log.info("onStart complete (faulty, crashes in " + msg.getSimulateCrashAtDelta() + ")");
 		else log.info("onStart complete (correct)");
 		log.debug("nodes: " + beatsToString(nodes.getBeats()));
 	}

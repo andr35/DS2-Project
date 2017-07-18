@@ -1,6 +1,7 @@
 package it.unitn.ds2.gsfd.experiment;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.json.*;
 import java.io.File;
@@ -55,10 +56,10 @@ public final class Experiment {
 	private final boolean enableMulticast;
 
 	// parameter "a" of probability of multicast (enableMulticast recovery)
-	private final double multicastParam;
+	private final Double multicastParam;
 
 	// maximum number of times a multicast can be postponed (enableMulticast recovery)
-	private final int multicastMaxWait;
+	private final Integer multicastMaxWait;
 
 
 	// scheduled crashes
@@ -82,6 +83,7 @@ public final class Experiment {
 		// generate the experiment
 		////////////////////////////////////////////////////////////////////
 
+		// TODO!
 		// generate an ID for the experiment
 		final String id = System.currentTimeMillis() + "_" + UUID.randomUUID().toString().replace("-", "");
 
@@ -158,15 +160,17 @@ public final class Experiment {
 		return pickStrategy;
 	}
 
-	public boolean isEnableMulticast() {
+	public boolean enableMulticast() {
 		return enableMulticast;
 	}
 
-	public double getMulticastParam() {
+	@Nullable
+	public Double getMulticastParam() {
 		return multicastParam;
 	}
 
-	public int getMulticastMaxWait() {
+	@Nullable
+	public Integer getMulticastMaxWait() {
 		return multicastMaxWait;
 	}
 
@@ -254,8 +258,8 @@ public final class Experiment {
 				.add("push_pull", pushPull)
 				.add("pick_strategy", pickStrategy)
 				.add("enable_multicast", enableMulticast)
-				.add("multicast_parameter", multicastParam)
-				.add("multicast_max_wait", multicastMaxWait)
+				.add("multicast_parameter", multicastParam == null ? JsonValue.NULL : Json.createValue(multicastParam))
+				.add("multicast_max_wait", multicastMaxWait == null ? JsonValue.NULL : Json.createValue(multicastMaxWait))
 			)
 			.add("result", Json.createObjectBuilder()
 				.add("start_time", start)
@@ -358,12 +362,12 @@ public final class Experiment {
 			return this;
 		}
 
-		public Builder multicastParam(double multicastParam) {
+		public Builder multicastParam(@Nullable Double multicastParam) {
 			this.multicastParam = multicastParam;
 			return this;
 		}
 
-		public Builder multicastMaxWait(int multicastMaxWait) {
+		public Builder multicastMaxWait(@Nullable Integer multicastMaxWait) {
 			this.multicastMaxWait = multicastMaxWait;
 			return this;
 		}
@@ -380,8 +384,10 @@ public final class Experiment {
 			Objects.requireNonNull(pushPull);
 			Objects.requireNonNull(pickStrategy);
 			Objects.requireNonNull(enableMulticast);
-			Objects.requireNonNull(multicastParam);
-			Objects.requireNonNull(multicastMaxWait);
+			if (enableMulticast) {
+				Objects.requireNonNull(multicastParam);
+				Objects.requireNonNull(multicastMaxWait);
+			}
 			return new Experiment(this);
 		}
 	}
