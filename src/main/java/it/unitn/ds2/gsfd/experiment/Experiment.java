@@ -89,7 +89,7 @@ public final class Experiment {
 		////////////////////////////////////////////////////////////////////
 
 		// generate an ID for the experiment
-		final String id = String.format("%05d_%d", COUNTER, System.currentTimeMillis());
+		final String id = String.format("%05d", COUNTER);
 
 		// number of nodes
 		final int numberOfNodes = builder.nodes.size();
