@@ -1,5 +1,7 @@
 package it.unitn.ds2.gsfd.experiment;
 
+import org.jetbrains.annotations.NotNull;
+
 import javax.json.*;
 import java.io.File;
 import java.io.FileWriter;
@@ -14,57 +16,25 @@ import java.util.stream.IntStream;
  */
 public final class Experiment {
 
-	// generate a new random experiment
-	public static Experiment generate(Set<String> nodes, boolean pullByGossip, int duration, int seed, int repetitions,
-									  long gossipDelta, long failureDelta) {
-		final Random random = new Random(seed);
-
-		// number of nodes
-		final int numberOfNodes = nodes.size();
-
-		// pick a random number of nodes to crash [0, n)
-		// NB: we crash at most all except one node
-		final int crashes = random.nextInt(numberOfNodes);
-
-		// generate a permutation of nodes
-		// the first n will be selected for the crashes
-		final List<String> permutation = new ArrayList<>(nodes);
-		Collections.sort(permutation);
-		Collections.shuffle(permutation, random);
-
-		// generate the crashes
-		final List<ExpectedCrash> expectedCrashes = IntStream.of(crashes)
-			.boxed()
-			.map(permutation::get)
-			.map(node -> new ExpectedCrash((long) random.nextInt(duration / 2), node))
-			.collect(Collectors.toList());
-
-		// return the experiment
-		final String id = String.format("nodes-%d__pushpull-%b__duration-%d__seed-%d__repetition-%d__gossip_delta-%d__failure_delta-%d",
-			numberOfNodes, pullByGossip, duration, seed, repetitions, gossipDelta, failureDelta);
-		return new Experiment(id, numberOfNodes, pullByGossip, duration, expectedCrashes, gossipDelta, failureDelta,
-			true, failureDelta, 2, 10, 1);
-		// TODO: proper input of catastrophe, missDelta, multicastParam, multicastMaxWait and pickStrategy
-		// TODO: change ID in those cases!!!
-	}
-
 	// unique identifier for the experiment
 	private final String id;
+
+
+	// random seed used to generate the crashes
+	private final int seed;
+
+	// number of the repetition of the experiment
+	private final int repetition;
+
+
+	// should the experiment crash a lot of nodes
+	private final boolean simulateCatastrophe;
 
 	// number of nodes that participates to the experiment
 	private final int numberOfNodes;
 
-	// gossip strategy to use: push vs push-pull
-	private final boolean pushPull;
-
 	// total duration (milliseconds) of the experiment
 	private final int duration;
-
-	// scheduled crashes
-	private final List<ExpectedCrash> expectedCrashes;
-
-	// reported crashed
-	private final List<ReportedCrash> reportedCrashed;
 
 	// frequency of Gossip
 	private final long gossipDelta;
@@ -72,20 +42,31 @@ public final class Experiment {
 	// time to consider a node failed
 	private final long failureDelta;
 
-	// if true, multicast will be periodically issued
-	private final boolean catastrophe;
-
-	// time to consider a missing node failed (catastrophe recovery)
+	// time to consider a missing node failed (enableMulticast recovery)
 	private final long missDelta;
 
-	// parameter "a" of probability of multicast (catastrophe recovery)
-	private final double multicastParam;
-
-	// maximum number of times a multicast can be postponed (catastrophe recovery)
-	private final int multicastMaxWait;
+	// gossip strategy to use: push vs push-pull
+	private final boolean pushPull;
 
 	// indicates what probability distribution is used when choosing random nodes
 	private final int pickStrategy;
+
+	// if true, multicast will be periodically issued
+	private final boolean enableMulticast;
+
+	// parameter "a" of probability of multicast (enableMulticast recovery)
+	private final double multicastParam;
+
+	// maximum number of times a multicast can be postponed (enableMulticast recovery)
+	private final int multicastMaxWait;
+
+
+	// scheduled crashes
+	private final List<ExpectedCrash> expectedCrashes;
+
+	// reported crashed
+	private final List<ReportedCrash> reportedCrashed;
+
 
 	// start time of the experiment
 	private Long start;
@@ -93,38 +74,68 @@ public final class Experiment {
 	// status of the experiment
 	private Long stop;
 
-	// initialize a new experiment
-	private Experiment(String id, int numberOfNodes, boolean pushPull,
-					   int duration, List<ExpectedCrash> expectedCrashes, long gossipDelta, long failureDelta,
-					   boolean catastrophe, long missDelta, double multicastParam, int multicastMaxWait,
-					   int pickStrategy) {
+
+	// private constructor -> use the builder instead
+	private Experiment(Builder builder) {
+
+		////////////////////////////////////////////////////////////////////
+		// generate the experiment
+		////////////////////////////////////////////////////////////////////
+
+		// generate an ID for the experiment
+		final String id = System.currentTimeMillis() + "_" + UUID.randomUUID().toString().replace("-", "");
+
+		// number of nodes
+		final int numberOfNodes = builder.nodes.size();
+
+		// if simulate enableMulticast -> crash 2/3 nodes, else just one
+		final int crashes = builder.simulateCatastrophe ? (int) Math.ceil(numberOfNodes / 3.0) : 1;
+
+		// initialize a random generator with the seed (to decide when to crash the nodes)
+		final Random random = new Random(builder.seed);
+
+		// get the crash time (inside the first half of the experiment duration)
+		final long crashTime = (long) random.nextInt(builder.duration / 2);
+
+		// generate a permutation of nodes
+		// the first n will be selected for the crashes
+		final List<String> permutation = new ArrayList<>(builder.nodes);
+		Collections.sort(permutation);
+		Collections.shuffle(permutation, random);
+
+		// generate the crashes
+		final List<ExpectedCrash> expectedCrashes = IntStream.of(crashes)
+			.boxed()
+			.map(permutation::get)
+			.map(node -> new ExpectedCrash(crashTime, node))
+			.collect(Collectors.toList());
+
+
+		////////////////////////////////////////////////////////////////////
+		// initialization
+		////////////////////////////////////////////////////////////////////
 		this.id = id;
+		this.seed = builder.seed;
+		this.repetition = builder.repetition;
+		this.simulateCatastrophe = builder.simulateCatastrophe;
 		this.numberOfNodes = numberOfNodes;
-		this.pushPull = pushPull;
-		this.duration = duration;
+		this.duration = builder.duration;
+		this.gossipDelta = builder.gossipDelta;
+		this.failureDelta = builder.failureDelta;
+		this.missDelta = builder.missDelta;
+		this.pushPull = builder.pushPull;
+		this.pickStrategy = builder.pickStrategy;
+		this.enableMulticast = builder.enableMulticast;
+		this.multicastParam = builder.multicastParam;
+		this.multicastMaxWait = builder.multicastMaxWait;
 		this.expectedCrashes = expectedCrashes;
-		this.reportedCrashed = new LinkedList<>();
-		this.gossipDelta = gossipDelta;
-		this.failureDelta = failureDelta;
-		this.catastrophe = catastrophe;
-		this.missDelta = missDelta;
-		this.multicastParam = multicastParam;
-		this.multicastMaxWait = multicastMaxWait;
-		this.pickStrategy = pickStrategy;
+		this.reportedCrashed = new ArrayList<>();
 		this.start = null;
 		this.stop = null;
 	}
 
-	public boolean isPushPull() {
-		return pushPull;
-	}
-
 	public int getDuration() {
 		return duration;
-	}
-
-	public List<ExpectedCrash> getExpectedCrashes() {
-		return expectedCrashes;
 	}
 
 	public long getGossipDelta() {
@@ -139,8 +150,16 @@ public final class Experiment {
 		return missDelta;
 	}
 
-	public boolean isCatastrophe() {
-		return catastrophe;
+	public boolean isPushPull() {
+		return pushPull;
+	}
+
+	public int getPickStrategy() {
+		return pickStrategy;
+	}
+
+	public boolean isEnableMulticast() {
+		return enableMulticast;
 	}
 
 	public double getMulticastParam() {
@@ -151,10 +170,13 @@ public final class Experiment {
 		return multicastMaxWait;
 	}
 
-	public int getPickStrategy() {
-		return pickStrategy;
+	public List<ExpectedCrash> getExpectedCrashes() {
+		return expectedCrashes;
 	}
 
+	/**
+	 * Start this experiment.
+	 */
 	public void start() {
 		if (start != null) {
 			throw new IllegalStateException("Please call the start() method only once per experiment.");
@@ -162,6 +184,9 @@ public final class Experiment {
 		start = System.currentTimeMillis();
 	}
 
+	/**
+	 * Stop this experiment.
+	 */
 	public void stop() {
 		if (stop != null) {
 			throw new IllegalStateException("Please call the stop() method only once per experiment.");
@@ -169,7 +194,12 @@ public final class Experiment {
 		stop = System.currentTimeMillis();
 	}
 
-	// report a new crash
+	/**
+	 * Report a new crash.
+	 *
+	 * @param node     Crashed node.
+	 * @param reporter Node that reported the crash.
+	 */
 	public void addCrash(String node, String reporter) {
 		if (start == null) {
 			throw new IllegalStateException("Please call the start() method to start the experiment first.");
@@ -212,17 +242,20 @@ public final class Experiment {
 		// generate the JSON report
 		final JsonObject report = Json.createObjectBuilder()
 			.add("id", id)
+			.add("seed", seed)
+			.add("repetition", repetition)
 			.add("settings", Json.createObjectBuilder()
+				.add("simulate_catastrophe", simulateCatastrophe)
 				.add("number_of_nodes", numberOfNodes)
 				.add("duration", duration)
-				.add("push_pull", pushPull)
 				.add("gossip_delta", gossipDelta)
 				.add("failure_delta", failureDelta)
 				.add("miss_delta", missDelta)
+				.add("push_pull", pushPull)
+				.add("pick_strategy", pickStrategy)
+				.add("enable_multicast", enableMulticast)
 				.add("multicast_parameter", multicastParam)
 				.add("multicast_max_wait", multicastMaxWait)
-				.add("catastrophe", catastrophe)
-				.add("strategy", pickStrategy)
 			)
 			.add("result", Json.createObjectBuilder()
 				.add("start_time", start)
@@ -242,7 +275,114 @@ public final class Experiment {
 
 	@Override
 	public String toString() {
-		return String.format("nodes=%d, duration=%dms, push_pull=%s, expected_crashes=%d, gossip_delta=%d, failure_delta=%d",
-			numberOfNodes, duration, pushPull, expectedCrashes.size(), gossipDelta, failureDelta);
+		return String.format("seed=%d, repetition=%d, simulate_catastrophe=%s, expected_crashes=%d, nodes=%d, " +
+				"duration=%dms, gossip_delta=%d, failure_delta=%d, miss_delta=%s, push_pull=%s, pick_strategy=%s, " +
+				"enable_multicast=%s, multicast_parameter=%f, multicast_max_wait=%s",
+			seed, repetition, simulateCatastrophe, expectedCrashes.size(), numberOfNodes,
+			duration, gossipDelta, failureDelta, missDelta, pushPull, pickStrategy,
+			enableMulticast, multicastParam, multicastMaxWait);
+	}
+
+
+	// builder to construct a new experiment
+	public static final class Builder {
+		private Set<String> nodes;
+		private Integer seed;
+		private Integer repetition;
+		private Boolean simulateCatastrophe;
+		private Integer duration;
+		private Long gossipDelta;
+		private Long failureDelta;
+		private Long missDelta;
+		private Boolean pushPull;
+		private Integer pickStrategy;
+		private Boolean enableMulticast;
+		private Double multicastParam;
+		private Integer multicastMaxWait;
+
+		public Builder() {
+		}
+
+		public Builder nodes(@NotNull Set<String> nodes) {
+			this.nodes = nodes;
+			return this;
+		}
+
+		public Builder seed(int seed) {
+			this.seed = seed;
+			return this;
+		}
+
+		public Builder repetition(int repetition) {
+			this.repetition = repetition;
+			return this;
+		}
+
+		public Builder simulateCatastrophe(boolean simulateCatastrophe) {
+			this.simulateCatastrophe = simulateCatastrophe;
+			return this;
+		}
+
+		public Builder duration(int duration) {
+			this.duration = duration;
+			return this;
+		}
+
+		public Builder gossipDelta(long gossipDelta) {
+			this.gossipDelta = gossipDelta;
+			return this;
+		}
+
+		public Builder failureDelta(long failureDelta) {
+			this.failureDelta = failureDelta;
+			return this;
+		}
+
+		public Builder missDelta(long missDelta) {
+			this.missDelta = missDelta;
+			return this;
+		}
+
+		public Builder pushPull(boolean pushPull) {
+			this.pushPull = pushPull;
+			return this;
+		}
+
+		public Builder pickStrategy(int pickStrategy) {
+			this.pickStrategy = pickStrategy;
+			return this;
+		}
+
+		public Builder enableMulticast(boolean enableMulticast) {
+			this.enableMulticast = enableMulticast;
+			return this;
+		}
+
+		public Builder multicastParam(double multicastParam) {
+			this.multicastParam = multicastParam;
+			return this;
+		}
+
+		public Builder multicastMaxWait(int multicastMaxWait) {
+			this.multicastMaxWait = multicastMaxWait;
+			return this;
+		}
+
+		public Experiment build() {
+			Objects.requireNonNull(nodes);
+			Objects.requireNonNull(seed);
+			Objects.requireNonNull(repetition);
+			Objects.requireNonNull(simulateCatastrophe);
+			Objects.requireNonNull(duration);
+			Objects.requireNonNull(gossipDelta);
+			Objects.requireNonNull(failureDelta);
+			Objects.requireNonNull(missDelta);
+			Objects.requireNonNull(pushPull);
+			Objects.requireNonNull(pickStrategy);
+			Objects.requireNonNull(enableMulticast);
+			Objects.requireNonNull(multicastParam);
+			Objects.requireNonNull(multicastMaxWait);
+			return new Experiment(this);
+		}
 	}
 }
