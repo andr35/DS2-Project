@@ -7,9 +7,9 @@ public class MulticastParamHelper {
 	 * and finds multicastParam (a) that scores the closest time.
 	 *
 	 * @param n Number of nodes of the system.
-	 * @param maxWait Maximum number of times multicast can be postponed
-	 * @param expectedFirstMulticast Desired time of first multicast
-	 * @return Value a associated to the most accurate expected first multicast
+	 * @param maxWait Maximum number of times multicast can be postponed.
+	 * @param expectedFirstMulticast Desired time of first multicast.
+	 * @return Value a associated to the most accurate expected first multicast.
 	 */
 	private static double findMulticastParam(int n, long maxWait, long expectedFirstMulticast) {
 		double aFirst = 1.0;
