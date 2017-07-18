@@ -42,7 +42,7 @@ public final class StartExperiment implements Serializable {
 	private final Double multicastParam;
 
 	// maximum number of times a multicast can be postponed (enableMulticast recovery)
-	private final Integer multicastMaxWait;
+	private final Long multicastMaxWait;
 
 
 	// private constructor -> use the builder
@@ -102,7 +102,7 @@ public final class StartExperiment implements Serializable {
 		return multicastParam;
 	}
 
-	public int getMulticastMaxWait() {
+	public long getMulticastMaxWait() {
 		if (!enableMulticast) {
 			throw new IllegalStateException("The node should not use the multicast parameter if multicast is not enabled");
 		}
@@ -120,7 +120,7 @@ public final class StartExperiment implements Serializable {
 		private Integer pickStrategy;
 		private Boolean enableMulticast;
 		private Double multicastParam;
-		private Integer multicastMaxWait;
+		private Long multicastMaxWait;
 
 		public Builder() {
 		}
@@ -170,7 +170,7 @@ public final class StartExperiment implements Serializable {
 			return this;
 		}
 
-		public Builder multicastMaxWait(Integer multicastMaxWait) {
+		public Builder multicastMaxWait(Long multicastMaxWait) {
 			this.multicastMaxWait = multicastMaxWait;
 			return this;
 		}

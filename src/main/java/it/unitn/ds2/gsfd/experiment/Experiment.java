@@ -59,7 +59,7 @@ public final class Experiment {
 	private final Double multicastParam;
 
 	// maximum number of times a multicast can be postponed (enableMulticast recovery)
-	private final Integer multicastMaxWait;
+	private final Long multicastMaxWait;
 
 
 	// scheduled crashes
@@ -170,7 +170,7 @@ public final class Experiment {
 	}
 
 	@Nullable
-	public Integer getMulticastMaxWait() {
+	public Long getMulticastMaxWait() {
 		return multicastMaxWait;
 	}
 
@@ -287,6 +287,73 @@ public final class Experiment {
 			enableMulticast, multicastParam, multicastMaxWait);
 	}
 
+	/**
+	 * Helper that computes expected time of first multicast for a values
+	 * and finds multicastParam (a) that scores the closest time.
+	 *
+	 * @param nodes                        Number of nodes in the system.
+	 * @param maxWaitMillis                Maximum number of milliseconds multicast can be postponed.
+	 * @param expectedFirstMulticastMillis Desired time of first multicast (in milliseconds).
+	 * @return Value a associated to the most accurate expected first multicast.
+	 */
+	public static double findMulticastParameter(int nodes, long maxWaitMillis, long expectedFirstMulticastMillis) {
+
+		// conversion
+		long maxWaitSeconds = (long) Math.round(maxWaitMillis / 1000);
+		final long expectedFirstMulticastSeconds = (long) Math.round(expectedFirstMulticastMillis / 1000);
+
+		double aFirst = 1.0;
+		double aLast = 30.0; // maximum a to test, to guarantee termination
+		double aStep = 0.25;
+
+		double a = aFirst;
+
+		double aClosest = 0.0;
+		double diff = 0.0;
+
+		// compute e, expected time of first multicast, wrt to a values
+		while (a <= aLast) {
+			double e = 0.0;
+
+			for (double t = 0.0; t <= maxWaitSeconds; t++) {
+				double m1 = t / maxWaitSeconds;
+				double e1 = t * ((1 - Math.pow(1 - Math.pow(m1, a), nodes)));
+
+				double e2 = 1.0;
+				for (double w = 0.0; w <= t - 1; w++) {
+					double m2 = w / maxWaitSeconds;
+					e2 = e2 * (1 - (1 - Math.pow(1 - Math.pow(m2, a), nodes)));
+				}
+
+				e += e1 * e2;
+			}
+
+			// as long as we don't surpass required time, a is the last one tried
+			if (e <= expectedFirstMulticastSeconds) {
+				aClosest = a;
+				diff = Math.abs(expectedFirstMulticastSeconds - e);
+			}
+
+			// when we surpass, take the closer
+			else {
+
+				// last e is closer
+				if (diff > Math.abs(expectedFirstMulticastSeconds - e)) {
+					return a;
+				}
+
+				// previous e was closer
+				else {
+					return aClosest;
+				}
+			}
+
+			// next value of a
+			a += aStep;
+		}
+
+		return aClosest;
+	}
 
 	// builder to construct a new experiment
 	public static final class Builder {
@@ -302,7 +369,7 @@ public final class Experiment {
 		private Integer pickStrategy;
 		private Boolean enableMulticast;
 		private Double multicastParam;
-		private Integer multicastMaxWait;
+		private Long multicastMaxWait;
 
 		public Builder() {
 		}
@@ -367,7 +434,7 @@ public final class Experiment {
 			return this;
 		}
 
-		public Builder multicastMaxWait(@Nullable Integer multicastMaxWait) {
+		public Builder multicastMaxWait(@Nullable Long multicastMaxWait) {
 			this.multicastMaxWait = multicastMaxWait;
 			return this;
 		}

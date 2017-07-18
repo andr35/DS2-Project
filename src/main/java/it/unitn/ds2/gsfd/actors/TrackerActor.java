@@ -192,6 +192,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 
 					// use different values for failureDelta... multiples of gossipDelta
 					for (int round = maxFailureRounds; round >= minFailureRounds; round -= 2) {
+						final long failureDelta = gossipDelta * round;
 
 						// use different strategies (push vs push_pull, how to select the nodes)
 						for (boolean pushPull : new boolean[]{false, true}) {
@@ -210,7 +211,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 										.simulateCatastrophe(simulateCatastrophe)
 										.duration(duration)
 										.gossipDelta(gossipDelta)
-										.failureDelta(gossipDelta * round)
+										.failureDelta(failureDelta)
 										.missDelta(missDelta)
 										.pushPull(pushPull)
 										.pickStrategy(pickStrategy)
@@ -219,16 +220,17 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 									// only in case we enable the multicast, play with its parameters
 									if (enableMulticast) {
 
-										// try different values for the parameter a -> regulate the first expected multicast
-										// TODO: put correct ones
-										for (int a : new int[]{1, 2}) {
+										// try different max waits -> regulate the maximum expected time for the first a multicast
+										for (long maxWait : new long[]{failureDelta, 2 * failureDelta}) {
 
-											// try different max waits -> regulate the maximum expected time for the first a multicast
-											for (int maxWait : new int[]{1, 2}) {
+											// try different values for the parameter a -> regulate the first expected multicast
+											for (double fractionOfFailTime : new double[]{1.0 / 3.0, 2.0 / 3.0}) {
+												final long expectedFirstMulticast = (long) fractionOfFailTime * failureDelta;
+												final double a = Experiment.findMulticastParameter(ids.size(), maxWait, expectedFirstMulticast);
 
 												// finally, generate the experiment
 												final Experiment experiment = builder
-													.multicastParam((double) a)
+													.multicastParam(a)
 													.multicastMaxWait(maxWait)
 													.build();
 
