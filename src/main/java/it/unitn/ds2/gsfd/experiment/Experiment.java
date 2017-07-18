@@ -43,8 +43,8 @@ public final class Experiment {
 		final String id = String.format("nodes-%d__pushpull-%b__duration-%d__seed-%d__repetition-%d__gossip_delta-%d__failure_delta-%d",
 			numberOfNodes, pullByGossip, duration, seed, repetitions, gossipDelta, failureDelta);
 		return new Experiment(id, numberOfNodes, pullByGossip, duration, expectedCrashes, gossipDelta, failureDelta,
-			true, 2, 10, 1);
-		// TODO: proper input of catastrophe, multicastParam, multicastMaxWait and pickStrategy
+			true, failureDelta, 2, 10, 1);
+		// TODO: proper input of catastrophe, missDelta, multicastParam, multicastMaxWait and pickStrategy
 		// TODO: change ID in those cases!!!
 	}
 
@@ -75,10 +75,13 @@ public final class Experiment {
 	// if true, multicast will be periodically issued
 	private final boolean catastrophe;
 
+	// time to consider a missing node failed (catastrophe recovery)
+	private final long missDelta;
+
 	// parameter "a" of probability of multicast (catastrophe recovery)
 	private final double multicastParam;
 
-	// maximum number of times a multicast can be postponed
+	// maximum number of times a multicast can be postponed (catastrophe recovery)
 	private final int multicastMaxWait;
 
 	// indicates what probability distribution is used when choosing random nodes
@@ -93,7 +96,7 @@ public final class Experiment {
 	// initialize a new experiment
 	private Experiment(String id, int numberOfNodes, boolean pushPull,
 					   int duration, List<ExpectedCrash> expectedCrashes, long gossipDelta, long failureDelta,
-					   boolean catastrophe, double multicastParam, int multicastMaxWait,
+					   boolean catastrophe, long missDelta, double multicastParam, int multicastMaxWait,
 					   int pickStrategy) {
 		this.id = id;
 		this.numberOfNodes = numberOfNodes;
@@ -104,6 +107,7 @@ public final class Experiment {
 		this.gossipDelta = gossipDelta;
 		this.failureDelta = failureDelta;
 		this.catastrophe = catastrophe;
+		this.missDelta = missDelta;
 		this.multicastParam = multicastParam;
 		this.multicastMaxWait = multicastMaxWait;
 		this.pickStrategy = pickStrategy;
@@ -129,6 +133,10 @@ public final class Experiment {
 
 	public long getFailureDelta() {
 		return failureDelta;
+	}
+
+	public long getMissDelta() {
+		return missDelta;
 	}
 
 	public boolean isCatastrophe() {

@@ -216,7 +216,7 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			multicastParam = msg.getMulticastParam();
 			multicastMaxWait = msg.getMulticastMaxWait();
 			multicastWait = 0;
-			missTime = failTime; // TODO: how to compute missTime?
+			missTime = msg.getMissTime();
 
 			// schedule reminder to attempt multicast
 			multicastTimeout = sendToSelf(new CatastropheReminder(), 1000);

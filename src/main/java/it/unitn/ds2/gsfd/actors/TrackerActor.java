@@ -73,7 +73,6 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 	// json writer -> pretty json files
 	private final JsonWriterFactory jsonWriterFactory;
 
-
 	// constructor is private... use the Props factory
 	private TrackerActor() {
 
@@ -224,6 +223,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 			.collect(Collectors.toMap(ExpectedCrash::getNode, ExpectedCrash::getDelta));
 		final long gossipTime = current.getGossipDelta();
 		final long failTime = current.getFailureDelta();
+		final long missTime = current.getMissDelta();
 		final double multicastParam = current.getMulticastParam();
 		final int multicastMaxWait = current.getMulticastMaxWait();
 		final int pickStrategy = current.getPickStrategy();
@@ -237,10 +237,10 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 			final String id = idFromRef(node);
 			if (crashesByNode.containsKey(id)) {
 				node.tell(StartExperiment.crash(current.isPushPull(), crashesByNode.get(id), nodes, gossipTime,
-					failTime, current.isCatastrophe(), multicastParam, multicastMaxWait, pickStrategy), getSelf());
+					failTime, current.isCatastrophe(), missTime, multicastParam, multicastMaxWait, pickStrategy), getSelf());
 			} else {
 				node.tell(StartExperiment.normal(current.isPushPull(), nodes, gossipTime, failTime,
-					current.isCatastrophe(), multicastParam, multicastMaxWait, pickStrategy), getSelf());
+					current.isCatastrophe(), missTime, multicastParam, multicastMaxWait, pickStrategy), getSelf());
 			}
 		});
 
