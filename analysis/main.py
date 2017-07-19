@@ -7,6 +7,7 @@ import re
 import os
 import pandas
 import click
+import itertools
 import matplotlib as mpl
 
 mpl.use('Agg')
@@ -20,18 +21,22 @@ Experiment = collections.namedtuple('Experiment', [
     'group',
     'id',
 
-    # settings
-    'number_of_nodes',
-    'duration',
-    'push_pull',
-    'gossip_delta',
-    'failure_delta',
-    'multicast_parameter',
-    'multicast_max_wait',
-
     # repetitions
     'seed',
     'repetition',
+
+    # settings
+    'simulate_catastrophe',
+    'number_of_nodes',
+    'duration',
+    'gossip_delta',
+    'failure_delta',
+    'miss_delta',
+    'push_pull',
+    'pick_strategy',
+    'enable_multicast',
+    'multicast_parameter',
+    'multicast_max_wait',
 
     # statistics
     'correct',
@@ -60,8 +65,14 @@ def parse_report(group, path):
 
     # extract repetition information
     _id = current['id']
-    seed = re.search('seed-([0-9]+)', _id).group(1)
-    repetition = re.search('repetition-([0-9]+)', _id).group(1)
+    try:
+        seed = current['seed']
+    except KeyError:
+        seed = re.search('seed-([0-9]+)', _id).group(1)
+    try:
+        repetition = current['repetition']
+    except KeyError:
+        repetition = re.search('repetition-([0-9]+)', _id).group(1)
 
     # load general information
     n_nodes = current['settings']['number_of_nodes']
@@ -135,18 +146,22 @@ def parse_report(group, path):
         group=group,
         id=_id,
 
-        # settings
-        number_of_nodes=n_nodes,
-        duration=current['settings']['duration'],
-        push_pull=current['settings']['push_pull'],
-        gossip_delta=current['settings']['gossip_delta'],
-        failure_delta=current['settings']['failure_delta'],
-        multicast_parameter=current['settings']['multicast_parameter'],
-        multicast_max_wait=current['settings']['multicast_max_wait'],
-
         # repetitions
         seed=seed,
         repetition=repetition,
+
+        # settings
+        simulate_catastrophe=current['settings']['simulate_catastrophe'],
+        number_of_nodes=n_nodes,
+        duration=current['settings']['duration'],
+        gossip_delta=current['settings']['gossip_delta'],
+        failure_delta=current['settings']['failure_delta'],
+        miss_delta=current['settings']['miss_delta'],
+        push_pull=current['settings']['push_pull'],
+        pick_strategy=current['settings']['pick_strategy'],
+        enable_multicast=current['settings']['enable_multicast'],
+        multicast_parameter=current['settings']['multicast_parameter'],
+        multicast_max_wait=current['settings']['multicast_max_wait'],
 
         # statistics
         correct=correct,
@@ -195,56 +210,100 @@ def plot_average_detect_time(path, frame):
     :param frame: Pandas frame with all the data.
     """
 
+    # x axis
+    x_axis = ['failure_delta']
+
+    # do not aggregate
+    aggregate_none = ['id', 'group', 'seed', 'repetition', 'miss_delta', 'multicast_parameter', 'multicast_max_wait']
+
+    # aggregate, plot on the same graph
+    aggregate_same = ['push_pull', 'pick_strategy']
+
+    # aggregate, on different plots
+    aggregate_different = ['simulate_catastrophe', 'number_of_nodes', 'duration', 'gossip_delta', 'enable_multicast']
+
+    # ignored fields -> these are the statistics
+    stats = ['correct', 'n_scheduled_crashes', 'n_expected_detected_crashes', 'n_correctly_detected_crashes',
+             'n_duplicated_reported_crashes', 'n_wrongly_reported_crashes', 'rate_detected_crashes',
+             'detect_time_average', 'detect_time_stdev']
+
+    # security check
+    missing = set(frame.columns.values) - set(x_axis + aggregate_none + aggregate_same + aggregate_different + stats)
+    if len(missing) != 0:
+        click.echo("ERROR: some fields are neither set to be aggregated nor to be ignored -> " + str(missing))
+
     # aggregate
-    aggregation = frame.groupby(['push_pull', 'number_of_nodes', 'gossip_delta', 'failure_delta'], as_index=False).agg(
+    aggregation = frame.groupby(x_axis + aggregate_same + aggregate_different, as_index=False).agg(
         {
             'correct': {
                 'aggregated_correct': (lambda column: False not in list(column))
             },
             'detect_time_average': {
-                'aggregated_detect_time_average': 'sum'
+                'aggregated_detect_time_average': 'mean'
+            },
+            'n_duplicated_reported_crashes': {
+                'n_duplicated_reported_crashes': 'mean'
+            },
+            'n_wrongly_reported_crashes': {
+                'n_wrongly_reported_crashes': 'mean'
             }
         }
     )
     aggregation.columns = aggregation.columns.droplevel(1)
 
-    # different plots for different number of nodes and gossip deltas
-    number_of_nodes = aggregation['number_of_nodes'].unique()
-    gossip_deltas = aggregation['gossip_delta'].unique()
-    for nodes in number_of_nodes:
-        for delta in gossip_deltas:
-            data = aggregation.query('number_of_nodes == %d' % nodes).query('gossip_delta == %d' % delta)
+    # collect different unique values of the fields that I want to aggregate in different plots
+    aggregate_different_unique_values = []
+    for field in aggregate_different:
+        aggregate_different_unique_values.append(aggregation[field].unique())
+
+    # different plots for each unique combination
+    for combination in itertools.product(*aggregate_different_unique_values):
+
+        # compute the name for the plot
+        name = '__'.join(map(lambda t: '%s-%s' % (t[0], t[1]), zip(aggregate_different, combination)))
+
+        # compute the correct projection on the table
+        data = None
+        for index, value in enumerate(combination):
+            data = (data if data is not None else aggregation).query('%s == %s' % (aggregate_different[index], value))
+
+        # extract the gossip delta, used to scale the plots axes
+        delta = combination[aggregate_different.index('gossip_delta')]
+        if len(data) > 0:
+
+            # extract the number of nodes for the legend
+            nodes = combination[aggregate_different.index('number_of_nodes')]
 
             # create the plot
             figure = plt.figure()
             ax = figure.add_subplot(111)
 
-            # 2 lines: PUSH and PUSH_PULL
-            push_frame_ok = data.query('correct == True and push_pull == False')
-            push_ok = (push_frame_ok['failure_delta'], push_frame_ok['detect_time_average'])
-            push_pull_frame_ok = data.query('correct == True and push_pull == True')
-            push_pull_ok = (push_pull_frame_ok['failure_delta'], push_pull_frame_ok['detect_time_average'])
-
-            push_frame_ko = data.query('correct == False and push_pull == False')
-            push_ko = (push_frame_ko['failure_delta'], push_frame_ko['detect_time_average'])
-            push_pull_frame_ko = data.query('correct == False and push_pull == True')
-            push_pull_ko = (push_pull_frame_ko['failure_delta'], push_pull_frame_ko['detect_time_average'])
-
-            ax.plot(push_ok[0] / 1000, push_ok[1] / 1000, label='push [correct]', marker='o')
-            ax.plot(push_ko[0] / 1000, push_ko[1] / 1000, label='push [wrong]', marker='x')
-            ax.plot(push_pull_ok[0] / 1000, push_pull_ok[1] / 1000, label='push_pull [correct]', marker='o')
-            ax.plot(push_pull_ko[0] / 1000, push_pull_ko[1] / 1000, label='push_pull [wrong]', marker='x')
+            # lines -> combinations of push_pull vs pick_strategy
+            aggregate_same_unique_values = []
+            for field in aggregate_same:
+                aggregate_same_unique_values.append(data[field].unique())
+            for correct in [True, False]:
+                for tt in itertools.product(*aggregate_same_unique_values):
+                    qq = ' and '.join(map(lambda t: '%s == %s' % (t[0], t[1]), zip(aggregate_same, tt)))
+                    ff = data.query('correct == %s' % correct).query('%s' % qq)
+                    trace = (ff['failure_delta'], ff['detect_time_average'])
+                    push_pull = 'push_pull' if tt[aggregate_same.index('push_pull')] else 'push'
+                    strategy = tt[aggregate_same.index('pick_strategy')]
+                    correct_label = 'correct' if correct else 'wrong'
+                    ax.plot(trace[0] / delta, trace[1] / delta,
+                            label='%s (%s) [%s]' % (push_pull, strategy, correct_label),
+                            marker='o' if correct else 'x')
 
             # labels, title, axes
             ax.legend(shadow=True)
             ax.set_title('Average Detection Time (n = %d, t_gossip = %.1f s)' % (nodes, delta / 1000))
-            ax.set_xlabel('Failure Time (s)')
-            ax.set_ylabel('Detection Time (s)')
+            ax.set_xlabel('Failure Time (rounds of gossip)')
+            ax.set_ylabel('Detection Time (rounds of gossip)')
             ax.tick_params(axis='both', which='major')
             ax.grid(True)
 
             # save plot
-            figure.savefig(path + 'detect_time__nodes-%d__gossip_delta-%d.png' % (nodes, delta), bbox_inches='tight')
+            figure.savefig(path + name + '.png', bbox_inches='tight')
             plt.close(figure)
 
 
