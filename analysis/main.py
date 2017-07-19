@@ -220,10 +220,11 @@ def plot_average_detect_time(path, frame):
     aggregate_same = ['push_pull', 'pick_strategy']
 
     # aggregate, on different plots
-    aggregate_different = ['simulate_catastrophe', 'number_of_nodes', 'duration', 'gossip_delta', 'enable_multicast']
+    aggregate_different = ['number_of_nodes', 'simulate_catastrophe', 'n_scheduled_crashes', 'duration', 'gossip_delta',
+                           'enable_multicast']
 
     # ignored fields -> these are the statistics
-    stats = ['correct', 'n_scheduled_crashes', 'n_expected_detected_crashes', 'n_correctly_detected_crashes',
+    stats = ['correct', 'n_expected_detected_crashes', 'n_correctly_detected_crashes',
              'n_duplicated_reported_crashes', 'n_wrongly_reported_crashes', 'rate_detected_crashes',
              'detect_time_average', 'detect_time_stdev']
 
