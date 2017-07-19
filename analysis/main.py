@@ -217,11 +217,11 @@ def plot_average_detect_time(path, frame):
     aggregate_none = ['id', 'group', 'seed', 'repetition', 'miss_delta', 'multicast_parameter', 'multicast_max_wait']
 
     # aggregate, plot on the same graph
-    aggregate_same = ['push_pull', 'pick_strategy']
+    aggregate_same = ['push_pull']
 
     # aggregate, on different plots
-    aggregate_different = ['number_of_nodes', 'simulate_catastrophe', 'n_scheduled_crashes', 'duration', 'gossip_delta',
-                           'enable_multicast']
+    aggregate_different = ['number_of_nodes', 'simulate_catastrophe', 'n_scheduled_crashes',
+                           'duration', 'gossip_delta', 'enable_multicast', 'pick_strategy']
 
     # ignored fields -> these are the statistics
     stats = ['correct', 'n_expected_detected_crashes', 'n_correctly_detected_crashes',
@@ -274,6 +274,7 @@ def plot_average_detect_time(path, frame):
 
             # extract the number of nodes for the legend
             nodes = combination[aggregate_different.index('number_of_nodes')]
+            strategy = combination[aggregate_different.index('pick_strategy')]
 
             # create the plot
             figure = plt.figure()
@@ -289,15 +290,14 @@ def plot_average_detect_time(path, frame):
                     ff = data.query('correct == %s' % correct).query('%s' % qq)
                     trace = (ff['failure_delta'], ff['detect_time_average'])
                     push_pull = 'push_pull' if tt[aggregate_same.index('push_pull')] else 'push'
-                    strategy = tt[aggregate_same.index('pick_strategy')]
                     correct_label = 'correct' if correct else 'wrong'
                     ax.plot(trace[0] / delta, trace[1] / delta,
-                            label='%s (%s) [%s]' % (push_pull, strategy, correct_label),
+                            label='%s [%s]' % (push_pull, correct_label),
                             marker='o' if correct else 'x')
 
             # labels, title, axes
             ax.legend(shadow=True)
-            ax.set_title('Average Detection Time (n = %d, t_gossip = %.1f s)' % (nodes, delta / 1000))
+            ax.set_title('Average Detection Time (n=%d, tg=%.1fs, st=%s)' % (nodes, delta / 1000, strategy))
             ax.set_xlabel('Failure Time (rounds of gossip)')
             ax.set_ylabel('Detection Time (rounds of gossip)')
             ax.tick_params(axis='both', which='major')
