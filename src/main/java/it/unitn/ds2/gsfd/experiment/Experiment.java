@@ -95,7 +95,7 @@ public final class Experiment {
 		final int numberOfNodes = builder.nodes.size();
 
 		// if simulate enableMulticast -> crash 2/3 nodes, else just one
-		final int crashes = builder.simulateCatastrophe ? (int) Math.ceil(numberOfNodes / 3.0) : 1;
+		final int crashes = builder.simulateCatastrophe ? (int) Math.ceil(numberOfNodes * 2.0 / 3.0) : 1;
 
 		// initialize a random generator with the seed (to decide when to crash the nodes)
 		final Random random = new Random(builder.seed);
@@ -110,12 +110,16 @@ public final class Experiment {
 		Collections.shuffle(permutation, random);
 
 		// generate the crashes
-		final List<ExpectedCrash> expectedCrashes = IntStream.of(crashes)
+		final List<ExpectedCrash> expectedCrashes = IntStream.range(0, crashes)
 			.boxed()
 			.map(permutation::get)
 			.map(node -> new ExpectedCrash(crashTime, node))
 			.collect(Collectors.toList());
 
+		// security check
+		if (crashes != expectedCrashes.size()) {
+			throw new AssertionError("Bug in the code...");
+		}
 
 		////////////////////////////////////////////////////////////////////
 		// initialization
