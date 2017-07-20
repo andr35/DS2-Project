@@ -176,7 +176,6 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		final long gossipDelta = config.getLong("tracker.gossip-delta");
 		final int minFailureRounds = config.getInt("tracker.min-failure-rounds");
 		final int maxFailureRounds = config.getInt("tracker.max-failure-rounds");
-		final long missDelta = gossipDelta * config.getLong("tracker.miss-delta-rounds");
 
 		// generate the experiments
 		this.experiments = new ArrayList<>();
@@ -201,6 +200,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 								// should the node enable the protocol to resist to catastrophes
 								for (boolean enableMulticast : new boolean[]{false, true}) {
 
+									// TODO: we fixed miss_time = fail_time
 									// build the experiment with the parameters used so far...
 									final Experiment.Builder builder = new Experiment.Builder()
 										.nodes(ids)
@@ -210,7 +210,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 										.duration(duration)
 										.gossipDelta(gossipDelta)
 										.failureDelta(failureDelta)
-										.missDelta(missDelta)
+										.missDelta(failureDelta)
 										.pushPull(pushPull)
 										.pickStrategy(pickStrategy)
 										.enableMulticast(enableMulticast);
