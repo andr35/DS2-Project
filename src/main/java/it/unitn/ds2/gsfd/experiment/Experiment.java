@@ -308,16 +308,20 @@ public final class Experiment {
 	public static double findMulticastParameter(int nodes, long maxWaitMillis, long expectedFirstMulticastMillis) {
 
 		// conversion
-		long maxWaitSeconds = (long) Math.round(maxWaitMillis / 1000);
+		final long maxWaitSeconds = (long) Math.round(maxWaitMillis / 1000);
 		final long expectedFirstMulticastSeconds = (long) Math.round(expectedFirstMulticastMillis / 1000);
 
-		double aFirst = 1.0;
-		double aLast = 30.0; // maximum a to test, to guarantee termination
-		double aStep = 0.25;
+		System.out.println("maxWait (milliseconds): " + maxWaitMillis);
+		System.out.println("maxWait (seconds): " + maxWaitSeconds);
+		System.out.println("expected multicast (milliseconds): " + expectedFirstMulticastMillis);
+		System.out.println("expected multicast (seconds): " + expectedFirstMulticastSeconds);
+
+		final double aFirst = 1.0;
+		final double aLast = 30.0; // maximum a to test, to guarantee termination
+		final double aStep = 0.25;
 
 		double a = aFirst;
-
-		double aClosest = 0.0;
+		double aClosest = aFirst;
 		double diff = 0.0;
 
 		// compute e, expected time of first multicast, wrt to a values

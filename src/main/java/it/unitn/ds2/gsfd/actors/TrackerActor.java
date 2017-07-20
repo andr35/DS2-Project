@@ -223,7 +223,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 
 											// try different values for the parameter a -> regulate the first expected multicast
 											for (double fractionOfFailTime : new double[]{1.0 / 3.0, 2.0 / 3.0}) {
-												final long expectedFirstMulticast = (long) fractionOfFailTime * failureDelta;
+												final long expectedFirstMulticast = (long) (fractionOfFailTime * failureDelta);
 												final double a = Experiment.findMulticastParameter(ids.size(), maxWait, expectedFirstMulticast);
 
 												// finally, generate the experiment
