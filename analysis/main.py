@@ -112,7 +112,15 @@ def parse_report(group, path):
 
     # [statistic]: rate of detected crashes
     n_scheduled = len(expected_crashes)
-    n_expected_detected = (n_scheduled * n_nodes) - (n_scheduled * (n_scheduled + 1) / 2)
+
+    # simulate_catastrophe --> all crashes at the same time
+    if current['settings']['simulate_catastrophe']:
+        n_expected_detected = n_scheduled * (n_nodes - n_scheduled)
+
+    # normal run -> only crashed nodes should not report the others
+    else:
+        n_expected_detected = (n_scheduled * n_nodes) - (n_scheduled * (n_scheduled + 1) / 2)
+
     n_detected = len(correct_crashes)
     n_duplicated = len(duplicated_crashes)
     n_wrong = len(wrong_crashes)
