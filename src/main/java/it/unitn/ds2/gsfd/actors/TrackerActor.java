@@ -176,7 +176,6 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		final long gossipDelta = config.getLong("tracker.gossip-delta");
 		final int minFailureRounds = config.getInt("tracker.min-failure-rounds");
 		final int maxFailureRounds = config.getInt("tracker.max-failure-rounds");
-		final long missDelta = gossipDelta * config.getLong("tracker.miss-delta-rounds");
 
 		// generate the experiments
 		this.experiments = new ArrayList<>();
@@ -201,6 +200,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 								// should the node enable the protocol to resist to catastrophes
 								for (boolean enableMulticast : new boolean[]{false, true}) {
 
+									// TODO: we fixed miss_time = fail_time
 									// build the experiment with the parameters used so far...
 									final Experiment.Builder builder = new Experiment.Builder()
 										.nodes(ids)
@@ -210,7 +210,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 										.duration(duration)
 										.gossipDelta(gossipDelta)
 										.failureDelta(failureDelta)
-										.missDelta(missDelta)
+										.missDelta(failureDelta)
 										.pushPull(pushPull)
 										.pickStrategy(pickStrategy)
 										.enableMulticast(enableMulticast);
@@ -223,13 +223,14 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 
 											// try different values for the parameter a -> regulate the first expected multicast
 											for (double fractionOfFailTime : new double[]{1.0 / 3.0, 2.0 / 3.0}) {
-												final long expectedFirstMulticast = (long) fractionOfFailTime * failureDelta;
+												final long expectedFirstMulticast = (long) (fractionOfFailTime * failureDelta);
 												final double a = Experiment.findMulticastParameter(ids.size(), maxWait, expectedFirstMulticast);
 
 												// finally, generate the experiment
 												final Experiment experiment = builder
 													.multicastParam(a)
 													.multicastMaxWait(maxWait)
+													.expectedFirstMulticast(expectedFirstMulticast)
 													.build();
 
 												// and add it to the experiments
@@ -245,6 +246,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 										final Experiment experiment = builder
 											.multicastParam(null)
 											.multicastMaxWait(null)
+											.expectedFirstMulticast(null)
 											.build();
 
 										// and add it to the experiments

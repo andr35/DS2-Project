@@ -65,6 +65,9 @@ public final class Experiment {
 	// maximum number of times a multicast can be postponed (enableMulticast recovery)
 	private final Long multicastMaxWait;
 
+	// interval of time after which we expect the first multicast from some node (only if multicast is enabled)
+	private final Long expectedFirstMulticast;
+
 
 	// scheduled crashes
 	private final List<ExpectedCrash> expectedCrashes;
@@ -95,7 +98,7 @@ public final class Experiment {
 		final int numberOfNodes = builder.nodes.size();
 
 		// if simulate enableMulticast -> crash 2/3 nodes, else just one
-		final int crashes = builder.simulateCatastrophe ? (int) Math.ceil(numberOfNodes / 3.0) : 1;
+		final int crashes = builder.simulateCatastrophe ? (int) Math.ceil(numberOfNodes * 2.0 / 3.0) : 1;
 
 		// initialize a random generator with the seed (to decide when to crash the nodes)
 		final Random random = new Random(builder.seed);
@@ -110,12 +113,16 @@ public final class Experiment {
 		Collections.shuffle(permutation, random);
 
 		// generate the crashes
-		final List<ExpectedCrash> expectedCrashes = IntStream.of(crashes)
+		final List<ExpectedCrash> expectedCrashes = IntStream.range(0, crashes)
 			.boxed()
 			.map(permutation::get)
 			.map(node -> new ExpectedCrash(crashTime, node))
 			.collect(Collectors.toList());
 
+		// security check
+		if (crashes != expectedCrashes.size()) {
+			throw new AssertionError("Bug in the code...");
+		}
 
 		////////////////////////////////////////////////////////////////////
 		// initialization
@@ -135,6 +142,7 @@ public final class Experiment {
 		this.enableMulticast = builder.enableMulticast;
 		this.multicastParam = builder.multicastParam;
 		this.multicastMaxWait = builder.multicastMaxWait;
+		this.expectedFirstMulticast = builder.expectedFirstMulticast;
 		this.expectedCrashes = expectedCrashes;
 		this.reportedCrashed = new ArrayList<>();
 		this.start = null;
@@ -265,6 +273,7 @@ public final class Experiment {
 				.add("enable_multicast", enableMulticast)
 				.add("multicast_parameter", multicastParam == null ? JsonValue.NULL : Json.createValue(multicastParam))
 				.add("multicast_max_wait", multicastMaxWait == null ? JsonValue.NULL : Json.createValue(multicastMaxWait))
+				.add("expected_first_multicast", expectedFirstMulticast == null ? JsonValue.NULL : Json.createValue(expectedFirstMulticast))
 			)
 			.add("result", Json.createObjectBuilder()
 				.add("start_time", start)
@@ -286,10 +295,10 @@ public final class Experiment {
 	public String toString() {
 		return String.format("seed=%d, repetition=%d, simulate_catastrophe=%s, expected_crashes=%d, nodes=%d, " +
 				"duration=%dms, gossip_delta=%d, failure_delta=%d, miss_delta=%s, push_pull=%s, pick_strategy=%s, " +
-				"enable_multicast=%s, multicast_parameter=%f, multicast_max_wait=%s",
+				"enable_multicast=%s, multicast_parameter=%f, multicast_max_wait=%s, expected_first_multicast=%s",
 			seed, repetition, simulateCatastrophe, expectedCrashes.size(), numberOfNodes,
 			duration, gossipDelta, failureDelta, missDelta, pushPull, pickStrategy,
-			enableMulticast, multicastParam, multicastMaxWait);
+			enableMulticast, multicastParam, multicastMaxWait, expectedFirstMulticast);
 	}
 
 	/**
@@ -304,16 +313,20 @@ public final class Experiment {
 	public static double findMulticastParameter(int nodes, long maxWaitMillis, long expectedFirstMulticastMillis) {
 
 		// conversion
-		long maxWaitSeconds = (long) Math.round(maxWaitMillis / 1000);
+		final long maxWaitSeconds = (long) Math.round(maxWaitMillis / 1000);
 		final long expectedFirstMulticastSeconds = (long) Math.round(expectedFirstMulticastMillis / 1000);
 
-		double aFirst = 1.0;
-		double aLast = 30.0; // maximum a to test, to guarantee termination
-		double aStep = 0.25;
+		System.out.println("maxWait (milliseconds): " + maxWaitMillis);
+		System.out.println("maxWait (seconds): " + maxWaitSeconds);
+		System.out.println("expected multicast (milliseconds): " + expectedFirstMulticastMillis);
+		System.out.println("expected multicast (seconds): " + expectedFirstMulticastSeconds);
+
+		final double aFirst = 1.0;
+		final double aLast = 30.0; // maximum a to test, to guarantee termination
+		final double aStep = 0.25;
 
 		double a = aFirst;
-
-		double aClosest = 0.0;
+		double aClosest = aFirst;
 		double diff = 0.0;
 
 		// compute e, expected time of first multicast, wrt to a values
@@ -375,6 +388,7 @@ public final class Experiment {
 		private Boolean enableMulticast;
 		private Double multicastParam;
 		private Long multicastMaxWait;
+		private Long expectedFirstMulticast;
 
 		public Builder() {
 		}
@@ -444,6 +458,11 @@ public final class Experiment {
 			return this;
 		}
 
+		public Builder expectedFirstMulticast(@Nullable Long expectedFirstMulticast) {
+			this.expectedFirstMulticast = expectedFirstMulticast;
+			return this;
+		}
+
 		public Experiment build() {
 			Objects.requireNonNull(nodes);
 			Objects.requireNonNull(seed);
@@ -459,6 +478,7 @@ public final class Experiment {
 				Objects.requireNonNull(missDelta);
 				Objects.requireNonNull(multicastParam);
 				Objects.requireNonNull(multicastMaxWait);
+				Objects.requireNonNull(expectedFirstMulticast);
 			}
 			return new Experiment(this);
 		}

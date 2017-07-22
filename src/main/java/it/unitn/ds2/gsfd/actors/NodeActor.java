@@ -214,7 +214,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		if (catastrophe) {
 			log.info("multicast is active");
 			multicastParam = msg.getMulticastParam();
-			multicastMaxWait = msg.getMulticastMaxWait();
+			multicastMaxWait = (long) Math.round(msg.getMulticastMaxWait() / 1000);
+			if (multicastMaxWait < 1) multicastMaxWait = 1;
 			multicastWait = 0;
 			missTime = msg.getMissDelta();
 
