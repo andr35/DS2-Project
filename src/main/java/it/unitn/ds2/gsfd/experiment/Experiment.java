@@ -65,6 +65,9 @@ public final class Experiment {
 	// maximum number of times a multicast can be postponed (enableMulticast recovery)
 	private final Long multicastMaxWait;
 
+	// interval of time after which we expect the first multicast from some node (only if multicast is enabled)
+	private final Long expectedFirstMulticast;
+
 
 	// scheduled crashes
 	private final List<ExpectedCrash> expectedCrashes;
@@ -139,6 +142,7 @@ public final class Experiment {
 		this.enableMulticast = builder.enableMulticast;
 		this.multicastParam = builder.multicastParam;
 		this.multicastMaxWait = builder.multicastMaxWait;
+		this.expectedFirstMulticast = builder.expectedFirstMulticast;
 		this.expectedCrashes = expectedCrashes;
 		this.reportedCrashed = new ArrayList<>();
 		this.start = null;
@@ -269,6 +273,7 @@ public final class Experiment {
 				.add("enable_multicast", enableMulticast)
 				.add("multicast_parameter", multicastParam == null ? JsonValue.NULL : Json.createValue(multicastParam))
 				.add("multicast_max_wait", multicastMaxWait == null ? JsonValue.NULL : Json.createValue(multicastMaxWait))
+				.add("expected_first_multicast", expectedFirstMulticast == null ? JsonValue.NULL : Json.createValue(expectedFirstMulticast))
 			)
 			.add("result", Json.createObjectBuilder()
 				.add("start_time", start)
@@ -290,10 +295,10 @@ public final class Experiment {
 	public String toString() {
 		return String.format("seed=%d, repetition=%d, simulate_catastrophe=%s, expected_crashes=%d, nodes=%d, " +
 				"duration=%dms, gossip_delta=%d, failure_delta=%d, miss_delta=%s, push_pull=%s, pick_strategy=%s, " +
-				"enable_multicast=%s, multicast_parameter=%f, multicast_max_wait=%s",
+				"enable_multicast=%s, multicast_parameter=%f, multicast_max_wait=%s, expected_first_multicast=%s",
 			seed, repetition, simulateCatastrophe, expectedCrashes.size(), numberOfNodes,
 			duration, gossipDelta, failureDelta, missDelta, pushPull, pickStrategy,
-			enableMulticast, multicastParam, multicastMaxWait);
+			enableMulticast, multicastParam, multicastMaxWait, expectedFirstMulticast);
 	}
 
 	/**
@@ -383,6 +388,7 @@ public final class Experiment {
 		private Boolean enableMulticast;
 		private Double multicastParam;
 		private Long multicastMaxWait;
+		private Long expectedFirstMulticast;
 
 		public Builder() {
 		}
@@ -452,6 +458,11 @@ public final class Experiment {
 			return this;
 		}
 
+		public Builder expectedFirstMulticast(@Nullable Long expectedFirstMulticast) {
+			this.expectedFirstMulticast = expectedFirstMulticast;
+			return this;
+		}
+
 		public Experiment build() {
 			Objects.requireNonNull(nodes);
 			Objects.requireNonNull(seed);
@@ -467,6 +478,7 @@ public final class Experiment {
 				Objects.requireNonNull(missDelta);
 				Objects.requireNonNull(multicastParam);
 				Objects.requireNonNull(multicastMaxWait);
+				Objects.requireNonNull(expectedFirstMulticast);
 			}
 			return new Experiment(this);
 		}

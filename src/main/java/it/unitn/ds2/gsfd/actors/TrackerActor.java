@@ -230,6 +230,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 												final Experiment experiment = builder
 													.multicastParam(a)
 													.multicastMaxWait(maxWait)
+													.expectedFirstMulticast(expectedFirstMulticast)
 													.build();
 
 												// and add it to the experiments
@@ -245,6 +246,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 										final Experiment experiment = builder
 											.multicastParam(null)
 											.multicastMaxWait(null)
+											.expectedFirstMulticast(null)
 											.build();
 
 										// and add it to the experiments
