@@ -37,6 +37,7 @@ Experiment = collections.namedtuple('Experiment', [
     'enable_multicast',
     'multicast_parameter',
     'multicast_max_wait',
+    'ratio_max_wait_and_failure',
 
     # statistics
     'correct',
@@ -78,6 +79,13 @@ def parse_report(group, path):
     n_nodes = current['settings']['number_of_nodes']
     expected_crashes = current['result']['expected_crashes']
     reported_crashes = current['result']['reported_crashes']
+
+    # other parameter...
+    max_wait = current['settings']['multicast_max_wait']
+    if max_wait is None:
+        ratio_max_wait_and_failure = 0
+    else:
+        ratio_max_wait_and_failure = max_wait / current['settings']['failure_delta']
 
     # transform expected_crashes into a map
     expected_crashes_map = {e['node']: e['delta'] for e in expected_crashes}
@@ -170,6 +178,7 @@ def parse_report(group, path):
         enable_multicast=current['settings']['enable_multicast'],
         multicast_parameter=current['settings']['multicast_parameter'],
         multicast_max_wait=current['settings']['multicast_max_wait'],
+        ratio_max_wait_and_failure=ratio_max_wait_and_failure,
 
         # statistics
         correct=correct,
@@ -222,14 +231,15 @@ def plot_average_detect_time(path, frame):
     x_axis = ['failure_delta']
 
     # do not aggregate
-    aggregate_none = ['id', 'group', 'seed', 'repetition', 'miss_delta', 'multicast_parameter', 'multicast_max_wait']
+    aggregate_none = ['id', 'group', 'seed', 'repetition', 'multicast_max_wait', 'miss_delta', 'multicast_parameter']
 
     # aggregate, plot on the same graph
     aggregate_same = ['push_pull']
 
     # aggregate, on different plots
     aggregate_different = ['number_of_nodes', 'simulate_catastrophe', 'n_scheduled_crashes',
-                           'duration', 'gossip_delta', 'enable_multicast', 'pick_strategy']
+                           'duration', 'gossip_delta', 'enable_multicast', 'pick_strategy',
+                           'ratio_max_wait_and_failure']
 
     # ignored fields -> these are the statistics
     stats = ['correct', 'n_expected_detected_crashes', 'n_correctly_detected_crashes',
