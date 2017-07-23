@@ -37,7 +37,9 @@ Experiment = collections.namedtuple('Experiment', [
     'enable_multicast',
     'multicast_parameter',
     'multicast_max_wait',
+    'expected_first_multicast',
     'ratio_max_wait_and_failure',
+    'ratio_expected_first_multicast_and_failure',
 
     # statistics
     'correct',
@@ -81,11 +83,17 @@ def parse_report(group, path):
     reported_crashes = current['result']['reported_crashes']
 
     # other parameter...
+    failure_delta = current['settings']['failure_delta']
     max_wait = current['settings']['multicast_max_wait']
     if max_wait is None:
         ratio_max_wait_and_failure = 0
     else:
-        ratio_max_wait_and_failure = max_wait / current['settings']['failure_delta']
+        ratio_max_wait_and_failure = round(max_wait / failure_delta, 2)
+    expected_first_multicast = current['settings']['expected_first_multicast']
+    if expected_first_multicast is None:
+        ratio_expected_first_multicast_and_failure = 0
+    else:
+        ratio_expected_first_multicast_and_failure = round(expected_first_multicast / failure_delta, 2)
 
     # transform expected_crashes into a map
     expected_crashes_map = {e['node']: e['delta'] for e in expected_crashes}
@@ -171,14 +179,16 @@ def parse_report(group, path):
         number_of_nodes=n_nodes,
         duration=current['settings']['duration'],
         gossip_delta=current['settings']['gossip_delta'],
-        failure_delta=current['settings']['failure_delta'],
+        failure_delta=failure_delta,
         miss_delta=current['settings']['miss_delta'],
         push_pull=current['settings']['push_pull'],
         pick_strategy=current['settings']['pick_strategy'],
         enable_multicast=current['settings']['enable_multicast'],
         multicast_parameter=current['settings']['multicast_parameter'],
         multicast_max_wait=current['settings']['multicast_max_wait'],
+        expected_first_multicast=expected_first_multicast,
         ratio_max_wait_and_failure=ratio_max_wait_and_failure,
+        ratio_expected_first_multicast_and_failure=ratio_expected_first_multicast_and_failure,
 
         # statistics
         correct=correct,
@@ -231,7 +241,8 @@ def plot_average_detect_time(path, frame):
     x_axis = ['failure_delta']
 
     # do not aggregate
-    aggregate_none = ['id', 'group', 'seed', 'repetition', 'multicast_max_wait', 'miss_delta', 'multicast_parameter']
+    aggregate_none = ['id', 'group', 'seed', 'repetition', 'multicast_max_wait', 'miss_delta', 'multicast_parameter',
+                      'expected_first_multicast']
 
     # aggregate, plot on the same graph
     aggregate_same = ['push_pull']
@@ -239,7 +250,7 @@ def plot_average_detect_time(path, frame):
     # aggregate, on different plots
     aggregate_different = ['number_of_nodes', 'simulate_catastrophe', 'n_scheduled_crashes',
                            'duration', 'gossip_delta', 'enable_multicast', 'pick_strategy',
-                           'ratio_max_wait_and_failure']
+                           'ratio_max_wait_and_failure', 'ratio_expected_first_multicast_and_failure']
 
     # ignored fields -> these are the statistics
     stats = ['correct', 'n_expected_detected_crashes', 'n_correctly_detected_crashes',
