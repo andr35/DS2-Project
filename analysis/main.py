@@ -8,6 +8,7 @@ import os
 import pandas
 import click
 import itertools
+import numpy as np
 import matplotlib as mpl
 
 mpl.use('Agg')
@@ -234,6 +235,20 @@ def analyze_results(base_path):
     return pandas.DataFrame.from_records(results, columns=Experiment._fields)
 
 
+def my_mean(data):
+    """
+    Compute the mean over a column of numeric values,
+    exclude the values -1 before the computation.
+    :param data: List of numbers.
+    :return: Mean.
+    """
+    ok = list(filter(lambda x: x != -1, data))
+    if len(ok) == 0:
+        return -1
+    else:
+        return np.mean(ok)
+
+
 def plot_average_detect_time(path, frame):
     """
     Plot a graph with the relationship between failure-time and performances.
@@ -273,7 +288,7 @@ def plot_average_detect_time(path, frame):
                 'aggregated_correct': (lambda column: False not in list(column))
             },
             'detect_time_average': {
-                'aggregated_detect_time_average': 'mean'
+                'aggregated_detect_time_average': my_mean
             },
             'n_duplicated_reported_crashes': {
                 'n_duplicated_reported_crashes': 'mean'
