@@ -89,7 +89,11 @@ def parse_report(group, path):
         ratio_max_wait_and_failure = 0
     else:
         ratio_max_wait_and_failure = round(max_wait / failure_delta, 2)
-    expected_first_multicast = current['settings']['expected_first_multicast']
+
+    try:
+        expected_first_multicast = current['settings']['expected_first_multicast']
+    except KeyError:
+        expected_first_multicast = None
     if expected_first_multicast is None:
         ratio_expected_first_multicast_and_failure = 0
     else:
