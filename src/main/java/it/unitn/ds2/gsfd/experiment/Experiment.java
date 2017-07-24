@@ -161,7 +161,8 @@ public final class Experiment {
 		return failureDelta;
 	}
 
-	public long getMissDelta() {
+	@Nullable
+	public Long getMissDelta() {
 		return missDelta;
 	}
 
@@ -428,7 +429,7 @@ public final class Experiment {
 			return this;
 		}
 
-		public Builder missDelta(Long missDelta) {
+		public Builder missDelta(@Nullable Long missDelta) {
 			this.missDelta = missDelta;
 			return this;
 		}
