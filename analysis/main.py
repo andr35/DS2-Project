@@ -10,6 +10,7 @@ import click
 import itertools
 import numpy as np
 import matplotlib as mpl
+import matplotlib.ticker as plticker
 
 mpl.use('Agg')
 import matplotlib.pyplot as plt
@@ -40,7 +41,8 @@ Experiment = collections.namedtuple('Experiment', [
     'multicast_max_wait',
     'expected_first_multicast',
     'ratio_max_wait_and_failure',
-    'ratio_expected_first_multicast_and_failure',
+    'ratio_expected_first_multicast',
+    'ratio_miss_delta',
 
     # statistics
     'correct',
@@ -96,9 +98,15 @@ def parse_report(group, path):
     except KeyError:
         expected_first_multicast = None
     if expected_first_multicast is None:
-        ratio_expected_first_multicast_and_failure = 0
+        ratio_expected_first_multicast = 0
     else:
-        ratio_expected_first_multicast_and_failure = round(expected_first_multicast / failure_delta, 2)
+        ratio_expected_first_multicast = round(expected_first_multicast / failure_delta, 2)
+
+    miss_delta = current['settings']['miss_delta']
+    if miss_delta is None:
+        ratio_miss_delta = 0
+    else:
+        ratio_miss_delta = round(miss_delta / failure_delta, 2)
 
     # transform expected_crashes into a map
     expected_crashes_map = {e['node']: e['delta'] for e in expected_crashes}
@@ -107,6 +115,8 @@ def parse_report(group, path):
     correct_crashes = {}
     duplicated_crashes = {}
     wrong_crashes = {}
+
+    # TODO: rate duplicati e wrong corretti
 
     # analyze the crashes
     for crash in reported_crashes:
@@ -193,7 +203,8 @@ def parse_report(group, path):
         multicast_max_wait=current['settings']['multicast_max_wait'],
         expected_first_multicast=expected_first_multicast,
         ratio_max_wait_and_failure=ratio_max_wait_and_failure,
-        ratio_expected_first_multicast_and_failure=ratio_expected_first_multicast_and_failure,
+        ratio_expected_first_multicast=ratio_expected_first_multicast,
+        ratio_miss_delta=ratio_miss_delta,
 
         # statistics
         correct=correct,
@@ -261,15 +272,15 @@ def plot_average_detect_time(path, frame):
 
     # do not aggregate
     aggregate_none = ['id', 'group', 'seed', 'repetition', 'multicast_max_wait', 'miss_delta', 'multicast_parameter',
-                      'expected_first_multicast']
+                      'expected_first_multicast', 'duration']
 
     # aggregate, plot on the same graph
     aggregate_same = ['push_pull']
 
     # aggregate, on different plots
     aggregate_different = ['number_of_nodes', 'simulate_catastrophe', 'n_scheduled_crashes',
-                           'duration', 'gossip_delta', 'enable_multicast', 'pick_strategy',
-                           'ratio_max_wait_and_failure', 'ratio_expected_first_multicast_and_failure']
+                           'gossip_delta', 'enable_multicast', 'ratio_max_wait_and_failure',
+                           'ratio_expected_first_multicast', 'ratio_miss_delta', 'pick_strategy']
 
     # ignored fields -> these are the statistics
     stats = ['correct', 'n_expected_detected_crashes', 'n_correctly_detected_crashes',
@@ -323,6 +334,11 @@ def plot_average_detect_time(path, frame):
             # extract the number of nodes for the legend
             nodes = combination[aggregate_different.index('number_of_nodes')]
             strategy = combination[aggregate_different.index('pick_strategy')]
+            catastrophe = combination[aggregate_different.index('simulate_catastrophe')]
+            multicast = combination[aggregate_different.index('enable_multicast')]
+            ratio_miss_delta = combination[aggregate_different.index('ratio_miss_delta')]
+            ratio_max_wait_and_failure = combination[aggregate_different.index('ratio_max_wait_and_failure')]
+            ratio_expected_first_multicast = combination[aggregate_different.index('ratio_expected_first_multicast')]
 
             # create the plot
             figure = plt.figure()
@@ -345,14 +361,140 @@ def plot_average_detect_time(path, frame):
 
             # labels, title, axes
             ax.legend(shadow=True)
-            ax.set_title('Average Detection Time (n=%d, tg=%.1fs, st=%s)' % (nodes, delta / 1000, strategy))
+            ax.set_title('n=%d, st=%s, cat=%s, mc=%s, tg=%.1fs, mr=%s, rw=%s, r1m=%s' %
+                         (nodes, strategy, 'T' if catastrophe else 'F', 'T' if multicast else 'F', delta / 1000,
+                          ratio_miss_delta, ratio_max_wait_and_failure, ratio_expected_first_multicast))
             ax.set_xlabel('Failure Time (rounds of gossip)')
             ax.set_ylabel('Detection Time (rounds of gossip)')
             ax.tick_params(axis='both', which='major')
             ax.grid(True)
+            ax.xaxis.set_major_locator(plticker.MultipleLocator(base=1))
+
+            ax.set_ylim([0, 50])
+            # multicast = combination[aggregate_different.index('enable_multicast')]
+            # if multicast:
+            #     ax.set_ylim([0, 50])
+            # else:
+            #     ax.set_ylim([0, 30])
 
             # save plot
             figure.savefig(path + name + '.png', bbox_inches='tight')
+            plt.close(figure)
+
+
+def plot_percentage_correctly_detected_failures(path, frame):
+    """
+    TODO!
+    :param path: Path where to store the plot.
+    :param frame: Pandas frame with all the data.
+    """
+
+    # x axis
+    x_axis = ['failure_delta']
+
+    # do not aggregate
+    aggregate_none = ['id', 'group', 'seed', 'repetition', 'multicast_max_wait', 'miss_delta', 'multicast_parameter',
+                      'expected_first_multicast', 'duration']
+
+    # aggregate, plot on the same graph
+    aggregate_same = ['push_pull']
+
+    # aggregate, on different plots
+    aggregate_different = ['number_of_nodes', 'simulate_catastrophe', 'n_scheduled_crashes',
+                           'gossip_delta', 'enable_multicast', 'ratio_max_wait_and_failure',
+                           'ratio_expected_first_multicast', 'ratio_miss_delta', 'pick_strategy']
+
+    # ignored fields -> these are the statistics
+    stats = ['correct', 'n_expected_detected_crashes', 'n_correctly_detected_crashes',
+             'n_duplicated_reported_crashes', 'n_wrongly_reported_crashes', 'rate_detected_crashes',
+             'detect_time_average', 'detect_time_stdev']
+
+    # security check
+    missing = set(frame.columns.values) - set(x_axis + aggregate_none + aggregate_same + aggregate_different + stats)
+    if len(missing) != 0:
+        click.echo("ERROR: some fields are neither set to be aggregated nor to be ignored -> " + str(missing))
+
+    # aggregate
+    aggregation = frame.groupby(x_axis + aggregate_same + aggregate_different, as_index=False).agg(
+        {
+            'correct': {
+                'aggregated_correct': (lambda column: False not in list(column))
+            },
+            'rate_detected_crashes': {
+                'aggregated_rate_detected_crashes': my_mean
+            },
+            'n_duplicated_reported_crashes': {
+                'n_duplicated_reported_crashes': 'mean'
+            },
+            'n_wrongly_reported_crashes': {
+                'n_wrongly_reported_crashes': 'mean'
+            }
+        }
+    )
+    aggregation.columns = aggregation.columns.droplevel(1)
+
+    # collect different unique values of the fields that I want to aggregate in different plots
+    aggregate_different_unique_values = []
+    for field in aggregate_different:
+        aggregate_different_unique_values.append(aggregation[field].unique())
+
+    # different plots for each unique combination
+    for combination in itertools.product(*aggregate_different_unique_values):
+
+        # compute the name for the plot
+        name = '__'.join(map(lambda t: '%s-%s' % (t[0], t[1]), zip(aggregate_different, combination)))
+
+        # compute the correct projection on the table
+        data = None
+        for index, value in enumerate(combination):
+            data = (data if data is not None else aggregation).query('%s == %s' % (aggregate_different[index], value))
+
+        # extract the gossip delta, used to scale the plots axes
+        delta = combination[aggregate_different.index('gossip_delta')]
+        if len(data) > 0:
+
+            # extract the number of nodes for the legend
+            nodes = combination[aggregate_different.index('number_of_nodes')]
+            strategy = combination[aggregate_different.index('pick_strategy')]
+            catastrophe = combination[aggregate_different.index('simulate_catastrophe')]
+            multicast = combination[aggregate_different.index('enable_multicast')]
+            ratio_miss_delta = combination[aggregate_different.index('ratio_miss_delta')]
+            ratio_max_wait_and_failure = combination[aggregate_different.index('ratio_max_wait_and_failure')]
+            ratio_expected_first_multicast = combination[aggregate_different.index('ratio_expected_first_multicast')]
+
+            # create the plot
+            figure = plt.figure()
+            ax = figure.add_subplot(111)
+
+            # lines -> combinations of push_pull vs pick_strategy
+            aggregate_same_unique_values = []
+            for field in aggregate_same:
+                aggregate_same_unique_values.append(data[field].unique())
+            for correct in [True, False]:
+                for tt in itertools.product(*aggregate_same_unique_values):
+                    qq = ' and '.join(map(lambda t: '%s == %s' % (t[0], t[1]), zip(aggregate_same, tt)))
+                    ff = data.query('correct == %s' % correct).query('%s' % qq)
+                    trace = (ff['failure_delta'], ff['rate_detected_crashes'])
+                    push_pull = 'push_pull' if tt[aggregate_same.index('push_pull')] else 'push'
+                    correct_label = 'correct' if correct else 'wrong'
+                    ax.plot(trace[0] / delta, trace[1],
+                            label='%s [%s]' % (push_pull, correct_label),
+                            marker='o' if correct else 'x')
+
+            # labels, title, axes
+            ax.legend(shadow=True)
+            ax.set_title('n=%d, st=%s, cat=%s, mc=%s, tg=%.1fs, mr=%s, rw=%s, r1m=%s' %
+                         (nodes, strategy, 'T' if catastrophe else 'F', 'T' if multicast else 'F', delta / 1000,
+                          ratio_miss_delta, ratio_max_wait_and_failure, ratio_expected_first_multicast))
+            ax.set_xlabel('Failure Time (rounds of gossip)')
+            ax.set_ylabel('Percentage correct detected failures')
+            ax.tick_params(axis='both', which='major')
+            ax.grid(True)
+            ax.xaxis.set_major_locator(plticker.MultipleLocator(base=1))
+            ax.set_ylim([0.5, 1.1])
+
+            # save plot
+            figure.savefig(path + 'percentage__' + name + '.png', bbox_inches='tight')
             plt.close(figure)
 
 
@@ -375,6 +517,9 @@ def main(reports_path, output_path):
 
     # plot 1: average detection time
     plot_average_detect_time(output_path + os.sep, frame)
+
+    # plot 2: percentage correctly detected
+    plot_percentage_correctly_detected_failures(output_path + os.sep, frame)
 
 
 # entry point for the script
