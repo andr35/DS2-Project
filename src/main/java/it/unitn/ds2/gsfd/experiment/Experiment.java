@@ -48,7 +48,7 @@ public final class Experiment {
 	private final long failureDelta;
 
 	// time to consider a missing node failed (enableMulticast recovery)
-	private final long missDelta;
+	private final Long missDelta;
 
 	// gossip strategy to use: push vs push-pull
 	private final boolean pushPull;
@@ -161,7 +161,8 @@ public final class Experiment {
 		return failureDelta;
 	}
 
-	public long getMissDelta() {
+	@Nullable
+	public Long getMissDelta() {
 		return missDelta;
 	}
 
@@ -267,7 +268,7 @@ public final class Experiment {
 				.add("duration", duration)
 				.add("gossip_delta", gossipDelta)
 				.add("failure_delta", failureDelta)
-				.add("miss_delta", missDelta)
+				.add("miss_delta", missDelta == null ? JsonValue.NULL : Json.createValue(missDelta))
 				.add("push_pull", pushPull)
 				.add("pick_strategy", pickStrategy)
 				.add("enable_multicast", enableMulticast)
@@ -428,7 +429,7 @@ public final class Experiment {
 			return this;
 		}
 
-		public Builder missDelta(long missDelta) {
+		public Builder missDelta(@Nullable Long missDelta) {
 			this.missDelta = missDelta;
 			return this;
 		}

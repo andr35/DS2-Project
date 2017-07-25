@@ -27,7 +27,7 @@ public final class StartExperiment implements Serializable {
 	private final long failureDelta;
 
 	// time to consider a missing node failed (enableMulticast recovery)
-	private final long missDelta;
+	private final Long missDelta;
 
 	// gossip strategy to use: push vs push-pull
 	private final boolean pushPull;
@@ -80,6 +80,9 @@ public final class StartExperiment implements Serializable {
 	}
 
 	public long getMissDelta() {
+		if (!enableMulticast) {
+			throw new IllegalStateException("The node should not use the multicast parameter if multicast is not enabled");
+		}
 		return missDelta;
 	}
 
@@ -145,7 +148,7 @@ public final class StartExperiment implements Serializable {
 			return this;
 		}
 
-		public Builder missDelta(long missDelta) {
+		public Builder missDelta(@Nullable Long missDelta) {
 			this.missDelta = missDelta;
 			return this;
 		}
