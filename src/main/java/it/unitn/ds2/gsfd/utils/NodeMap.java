@@ -45,6 +45,11 @@ public final class NodeMap {
 		return nodes.get(ref);
 	}
 
+	public void reappear(ActorRef ref) {
+		nodes.put(ref, new NodeInfo());
+		correctNodes.add(ref);
+	}
+
 	public NodeInfo remove(ActorRef ref) {
 		correctNodes.remove(ref);
 		missingNodes.remove(ref);
@@ -70,16 +75,41 @@ public final class NodeMap {
 		}
 	}
 
+	public Set<ActorRef> getAllNodes() {
+		return new HashSet<>(nodes.keySet());
+	}
+
+	public Set<ActorRef> getCorrectNodes() {
+		return Collections.unmodifiableSet(correctNodes);
+	}
+
 	public Set<ActorRef> getUpdatableNodes() {
+
+		// include all nodes that are correct or missing
 		Set<ActorRef> updatables = new HashSet<>(correctNodes);
 		updatables.addAll(missingNodes);
 		return updatables;
 	}
 
+	/**
+	 * Function to create the structure for heartbeat counters to be attached
+	 * to gossip and multicast messages.
+	 * Does not contain nodes considered failed (those waiting for cleanup).
+	 *
+	 * @return Map of nodes into corresponding heartbeat counter.
+	 */
 	public Map<ActorRef, Long> getBeats() {
-		Map<ActorRef, Long> beats = new HashMap<>();
-		nodes.forEach((ref, info) -> beats.put(ref, info.getBeatCount()));
-		return beats;
+		Map<ActorRef, Long> updatableBeats = new HashMap<>();
+
+		// include heartbeats of all nodes that are correct or missing
+		Set<ActorRef> updatables = new HashSet<>(correctNodes);
+		updatables.addAll(missingNodes);
+		updatables.forEach(ref -> updatableBeats.put(ref, nodes.get(ref).getBeatCount()));
+
+		// include self
+		updatableBeats.put(primary, nodes.get(primary).getBeatCount());
+
+		return updatableBeats;
 	}
 
 	/**
@@ -95,13 +125,22 @@ public final class NodeMap {
 	@Nullable
 	public ActorRef pickNode(int strategy) {
 
+		// quiescence debug -----------------
+		String s = "QUIESCENCE : {";
+		for (ActorRef c : correctNodes) {
+			s += " (" + c.path().name() + ", Q=" + nodes.get(c).getQuiescence() + ") ";
+		}
+		s += "}";
+		System.out.println(s);
+		//-----------------------------------
+
 		if (correctNodes.isEmpty()) {
 			return null;
 		}
 
-		final List<ActorRef> correctList = new ArrayList<>(correctNodes);
+		final List<ActorRef> candidates = new ArrayList<>(correctNodes);
 
-		if (strategy < 0 || strategy > 2) {
+		if (strategy < 0 || strategy > 3) {
 			throw new RuntimeException("pickNode strategy unexpected (" + strategy + ")");
 		}
 
@@ -109,14 +148,34 @@ public final class NodeMap {
 		// we can directly return a random node
 		if (strategy == 0) {
 			final Random r = new Random();
-			final int randomIndex = r.nextInt(correctList.size());
-			return correctList.get(randomIndex);
+			final int randomIndex = r.nextInt(candidates.size());
+			return candidates.get(randomIndex);
 		}
 
-		final List<ActorRef> candidates = new ArrayList<>(nodes.keySet());
-		candidates.retainAll(correctList);
+		// with strategy 3 always choose a random node with highest quiescence
+		if (strategy == 3) {
+			long maxQuiescence = nodes.get(candidates.get(0)).getQuiescence();
+			List<ActorRef> maxRef = new ArrayList<>();
+			maxRef.add(candidates.get(0));
 
-		// compute in advance a score for each node (will alter probability of it being chosen).
+			for (int i = 1; i < candidates.size(); i++) {
+				final long q = nodes.get(candidates.get(i)).getQuiescence();
+				if (q > maxQuiescence) {
+					maxQuiescence = q;
+					maxRef.clear();
+					maxRef.add(candidates.get(i));
+				}
+				if (q == maxQuiescence) {
+					maxRef.add(candidates.get(i));
+				}
+			}
+
+			final Random r = new Random();
+			final int randomIndex = r.nextInt(maxRef.size());
+			return maxRef.get(randomIndex);
+		}
+
+		// for strategies 1 and 2, compute in advance a score for each node
 		// the +1 guarantees every node has a chance to be chosen
 		final List<Long> nodeScores = new ArrayList<>();
 		for (int i = 0; i < candidates.size(); i++) {
@@ -125,6 +184,7 @@ public final class NodeMap {
 			} else if (strategy == 2) {
 				nodeScores.add(i, (long) Math.pow(nodes.get(candidates.get(i)).getQuiescence(), 2) + 1);
 			}
+
 		}
 
 		// generate a random number whose value ranges from 0.0 to the sum

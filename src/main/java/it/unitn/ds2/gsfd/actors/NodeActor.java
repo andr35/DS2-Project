@@ -15,7 +15,9 @@ import scala.concurrent.duration.Duration;
 
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -253,6 +255,9 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		// increment node's own heartbeat counter
 		nodes.get(getSelf()).heartbeat();
 
+		// increment all nodes quiescence
+		nodes.getCorrectNodes().forEach(c -> nodes.get(c).quiescent());
+
 		// pick random correct node
 		final ActorRef gossipNode = nodes.pickNode(pickStrategy);
 		if (gossipNode != null) {
@@ -423,13 +428,16 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	}
 
 	private void updateBeats(Map<ActorRef, Long> gossipedBeats) {
-		nodes.getUpdatableNodes().forEach((ref) -> {
-			if (gossipedBeats.containsKey(ref)) {
-				final long beat = gossipedBeats.get(ref);
+		Map<ActorRef, Long> gb = new HashMap<>(gossipedBeats);
+		Set<ActorRef> updatables = new HashSet<>(nodes.getUpdatableNodes());
+		Set<ActorRef> all = new HashSet<>(nodes.getAllNodes());
+
+		gb.forEach((ref, beats) -> {
+			if (updatables.contains(ref)) {
 
 				// if a higher heartbeat counter was gossiped, update it
-				if (beat > nodes.get(ref).getBeatCount()) {
-					nodes.get(ref).setBeatCount(beat);
+				if (beats > nodes.get(ref).getBeatCount()) {
+					nodes.get(ref).setBeatCount(beats);
 
 					// lower the probability of gossiping the same node soon
 					nodes.get(ref).resetQuiescence();
@@ -440,11 +448,17 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 					// restart the timeout
 					final Fail failMsg = new Fail(ref, nodes.get(ref).getTimeoutId() + 1);
 					nodes.get(ref).resetTimeout(sendToSelf(failMsg, failTime));
-				} else {
-
-					// no heartbeat update, increase probability of gossiping the node
-					nodes.get(ref).quiescent();
 				}
+
+			} else if (!all.contains(ref) && ref != getSelf()) { // node was already removed (cleanup)
+
+				// allow nodes to reappear after cleanup (improper, should not happen)
+				nodes.reappear(ref);
+				nodes.get(ref).resetQuiescence();
+				nodes.get(ref).setBeatCount(beats);
+				// TODO: signal tracker of reappearance (tracker should not  anymore consider that node reported by this node)
+
+				log.warning("Node {} reappearance", idFromRef(ref));
 			}
 		});
 	}
