@@ -123,6 +123,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 			.match(ScheduleExperimentStop.class, msg -> onExperimentEnd(msg.getExperiment()))
 			.match(Crash.class, msg -> onCrash())
 			.match(CrashReport.class, this::onReportCrash)
+			.match(ReappearReport.class, this::onReportReappear)
 			.matchAny(msg -> log.error("Received unknown message -> " + msg))
 			.build();
 	}
@@ -195,7 +196,7 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 
 						// use different strategies (push vs push_pull, how to select the nodes)
 						for (boolean pushPull : new boolean[]{false, true}) {
-							for (int pickStrategy = 0; pickStrategy < 3; pickStrategy++) {
+							for (int pickStrategy = 0; pickStrategy < 4; pickStrategy++) {
 
 								// should the node enable the protocol to resist to catastrophes
 								for (boolean enableMulticast : new boolean[]{false, true}) {
@@ -392,5 +393,25 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		} else {
 			log.error("Crash report outside an experiment... there must be an error!");
 		}
+	}
+
+	/**
+	 * This method is called when a node restores another one it previously considered
+	 * failed. The tracker simply add the reappearance report to the experiment in order to include
+	 * it in the final report.
+	 *
+	 * @param msg Reappearance report, with the details of the node and who restored it.
+	 */
+	private void onReportReappear(ReappearReport msg) {
+		log.info("Report reappearance of node {} (from node {})", idFromRef(msg.getNode()), idFromRef(getSender()));
+
+		// memorize the crash report
+		/*if (current != null) {
+			current.addCrash(idFromRef(msg.getNode()), idFromRef(getSender()));
+		} else {
+			log.error("Reappearance report outside an experiment... there must be an error!");
+		}*/
+
+		// TODO: manage reappearance
 	}
 }
