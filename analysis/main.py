@@ -355,7 +355,7 @@ def plot_average_detect_time(path, frame):
                     trace = (ff['failure_delta'], ff['detect_time_average'])
                     push_pull = 'push_pull' if tt[aggregate_same.index('push_pull')] else 'push'
                     correct_label = 'correct' if correct else 'wrong'
-                    ax.plot(trace[0] / delta, trace[1] / delta,
+                    ax.plot(trace[0] / 1000, trace[1] / 1000,
                             label='%s [%s]' % (push_pull, correct_label),
                             marker='o' if correct else 'x')
 
@@ -364,13 +364,13 @@ def plot_average_detect_time(path, frame):
             ax.set_title('n=%d, st=%s, cat=%s, mc=%s, tg=%.1fs, mr=%s, rw=%s, r1m=%s' %
                          (nodes, strategy, 'T' if catastrophe else 'F', 'T' if multicast else 'F', delta / 1000,
                           ratio_miss_delta, ratio_max_wait_and_failure, ratio_expected_first_multicast))
-            ax.set_xlabel('Failure Time (rounds of gossip)')
-            ax.set_ylabel('Detection Time (rounds of gossip)')
+            ax.set_xlabel('Failure Time (seconds)')
+            ax.set_ylabel('Detection Time (seconds)')
             ax.tick_params(axis='both', which='major')
             ax.grid(True)
-            ax.xaxis.set_major_locator(plticker.MultipleLocator(base=1))
+            # ax.xaxis.set_major_locator(plticker.MultipleLocator(base=1))
 
-            ax.set_ylim([0, 50])
+            ax.set_ylim([0, 10])
             # multicast = combination[aggregate_different.index('enable_multicast')]
             # if multicast:
             #     ax.set_ylim([0, 50])
@@ -477,7 +477,7 @@ def plot_percentage_correctly_detected_failures(path, frame):
                     trace = (ff['failure_delta'], ff['rate_detected_crashes'])
                     push_pull = 'push_pull' if tt[aggregate_same.index('push_pull')] else 'push'
                     correct_label = 'correct' if correct else 'wrong'
-                    ax.plot(trace[0] / delta, trace[1],
+                    ax.plot(trace[0] / 1000, trace[1],
                             label='%s [%s]' % (push_pull, correct_label),
                             marker='o' if correct else 'x')
 
@@ -486,11 +486,11 @@ def plot_percentage_correctly_detected_failures(path, frame):
             ax.set_title('n=%d, st=%s, cat=%s, mc=%s, tg=%.1fs, mr=%s, rw=%s, r1m=%s' %
                          (nodes, strategy, 'T' if catastrophe else 'F', 'T' if multicast else 'F', delta / 1000,
                           ratio_miss_delta, ratio_max_wait_and_failure, ratio_expected_first_multicast))
-            ax.set_xlabel('Failure Time (rounds of gossip)')
+            ax.set_xlabel('Failure Time (seconds)')
             ax.set_ylabel('Percentage correct detected failures')
             ax.tick_params(axis='both', which='major')
             ax.grid(True)
-            ax.xaxis.set_major_locator(plticker.MultipleLocator(base=1))
+            # ax.xaxis.set_major_locator(plticker.MultipleLocator(base=1))
             ax.set_ylim([0.5, 1.1])
 
             # save plot
