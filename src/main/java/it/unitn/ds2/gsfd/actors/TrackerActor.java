@@ -188,76 +188,78 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 			for (int repetition = 0; repetition < repetitions; repetition++) {
 
 				// should I crash only 1 node or 2/3 of them
-				for (boolean simulateCatastrophe : new boolean[]{false, true}) {
+				for (boolean simulateCatastrophe : new boolean[]{true, false}) {
+					// Catastrophe with multicast
+					boolean enableMulticast = simulateCatastrophe;
 
 					// use different values for failureDelta... multiples of gossipDelta
 					for (int round = maxFailureRounds; round >= minFailureRounds; round -= 2) {
-						final long failureDelta = gossipDelta * round;
 
 						// use different strategies (push vs push_pull, how to select the nodes)
 						for (boolean pushPull : new boolean[]{false, true}) {
-							for (int pickStrategy = 0; pickStrategy < 4; pickStrategy++) {
+							for (int pickStrategy = 0; pickStrategy < 1; pickStrategy++) { // Single strategy
 
-								// should the node enable the protocol to resist to catastrophes
-								for (boolean enableMulticast : new boolean[]{false, true}) {
+								// Change gossip delta depending on push or push_pull
+								final long properGossipDelta = pushPull ? gossipDelta : (gossipDelta / 2);
+								final long failureDelta = gossipDelta * round;
 
-									// build the experiment with the parameters used so far...
-									final Experiment.Builder builder = new Experiment.Builder()
-										.nodes(ids)
-										.seed(seed)
-										.repetition(repetition)
-										.simulateCatastrophe(simulateCatastrophe)
-										.duration(duration)
-										.gossipDelta(gossipDelta)
-										.failureDelta(failureDelta)
-										.pushPull(pushPull)
-										.pickStrategy(pickStrategy)
-										.enableMulticast(enableMulticast);
+								// build the experiment with the parameters used so far...
+								final Experiment.Builder builder = new Experiment.Builder()
+									.nodes(ids)
+									.seed(seed)
+									.repetition(repetition)
+									.simulateCatastrophe(simulateCatastrophe)
+									.duration(duration)
+									.gossipDelta(properGossipDelta)
+									.failureDelta(failureDelta)
+									.pushPull(pushPull)
+									.pickStrategy(pickStrategy)
+									.enableMulticast(enableMulticast);
 
-									// only in case we enable the multicast, play with its parameters
-									if (enableMulticast) {
+								// only in case we enable the multicast, play with its parameters
+								if (enableMulticast) {
 
-										// try different max waits -> regulate the maximum expected time for the first a multicast
-										for (long maxWait : new long[]{failureDelta}) {
+									// try different max waits -> regulate the maximum expected time for the first a multicast
+									for (long maxWait : new long[]{failureDelta}) {
 
-											// try different miss_time
-											for (long missDelta : new long[]{failureDelta, failureDelta * 2}) {
+										// try different miss_time
+										for (long missDelta : new long[]{failureDelta}) {
 
-												// try different values for the parameter a -> regulate the first expected multicast
-												for (double fractionOfFailTime : new double[]{1.0 / 2.0}) {
-													final long expectedFirstMulticast = (long) (fractionOfFailTime * failureDelta);
-													final double a = Experiment.findMulticastParameter(ids.size(), maxWait, expectedFirstMulticast);
+											// try different values for the parameter a -> regulate the first expected multicast
+											for (double fractionOfFailTime : new double[]{1.0 / 2.0}) {
+												final long expectedFirstMulticast = (long) (fractionOfFailTime * failureDelta);
+												final double a = Experiment.findMulticastParameter(ids.size(), maxWait, expectedFirstMulticast);
 
-													// finally, generate the experiment
-													final Experiment experiment = builder
-														.missDelta(missDelta)
-														.multicastParam(a)
-														.multicastMaxWait(maxWait)
-														.expectedFirstMulticast(expectedFirstMulticast)
-														.build();
+												// finally, generate the experiment
+												final Experiment experiment = builder
+													.missDelta(missDelta)
+													.multicastParam(a)
+													.multicastMaxWait(maxWait)
+													.expectedFirstMulticast(expectedFirstMulticast)
+													.build();
 
-													// and add it to the experiments
-													experiments.add(experiment);
-												}
+												// and add it to the experiments
+												experiments.add(experiment);
 											}
 										}
 									}
-
-									// use fixed values
-									else {
-
-										// finally, generate the experiment
-										final Experiment experiment = builder
-											.missDelta(null)
-											.multicastParam(null)
-											.multicastMaxWait(null)
-											.expectedFirstMulticast(null)
-											.build();
-
-										// and add it to the experiments
-										experiments.add(experiment);
-									}
 								}
+
+								// use fixed values
+								else {
+
+									// finally, generate the experiment
+									final Experiment experiment = builder
+										.missDelta(null)
+										.multicastParam(null)
+										.multicastMaxWait(null)
+										.expectedFirstMulticast(null)
+										.build();
+
+									// and add it to the experiments
+									experiments.add(experiment);
+								}
+
 							}
 						}
 					}
