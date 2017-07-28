@@ -15,7 +15,9 @@ import scala.concurrent.duration.Duration;
 
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -239,12 +241,16 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		if (gossipTimeout != null) gossipTimeout.cancel();
 		if (multicastTimeout != null) multicastTimeout.cancel();
 		nodes.clear();
+
+		// debug
 		log.info("onStop complete");
 	}
 
 	private void onCrash() {
 		getContext().become(notReady);
 		sendToTracker(new Crash());
+
+		// debug
 		log.info("onCrash complete");
 	}
 
@@ -252,6 +258,9 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 		// increment node's own heartbeat counter
 		nodes.get(getSelf()).heartbeat();
+
+		// increment all nodes quiescence
+		nodes.getCorrectNodes().forEach(c -> nodes.get(c).quiescent());
 
 		// pick random correct node
 		final ActorRef gossipNode = nodes.pickNode(pickStrategy);
@@ -268,13 +277,13 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			gossipTimeout = sendToSelf(new GossipReminder(), gossipTime);
 
 		} else {
+
+			// debug
 			log.info("Gossip stopped (no correct node to gossip)");
 		}
 	}
 
 	private void onGossip(Gossip msg) {
-		log.debug("gossip from {}, beats={}, push_pull={}",
-			idFromRef(getSender()), beatsToString(msg.getBeats()), pullByGossip);
 
 		// this method update both the beats for all nodes and resets the quiescence for any updated
 		updateBeats(msg.getBeats());
@@ -284,6 +293,10 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			// gossip back (pull strategy)
 			reply(new GossipReply(nodes.getBeats()));
 		}
+
+		// debug
+		log.debug("gossip from {}, beats={}, push_pull={}",
+			idFromRef(getSender()), beatsToString(msg.getBeats()), pullByGossip);
 	}
 
 	/**
@@ -294,6 +307,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	 */
 	private void onGossipReply(GossipReply msg) {
 		updateBeats(msg.getBeats());
+
+		// debug
 		log.debug("gossip (reply) from {}", idFromRef(getSender()));
 	}
 
@@ -317,6 +332,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 				// give the system more time to decide if the node is failed
 				final Miss missMsg = new Miss(failing, nodes.get(failing).getTimeoutId() + 1);
 				nodes.get(failing).resetTimeout(sendToSelf(missMsg, missTime));
+
+				// debug
 				log.info("Node {} is missing", idFromRef(failing));
 			} else {
 
@@ -327,10 +344,14 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 				// schedule message to remove the node from the heartbeat map
 				final Cleanup cleanMsg = new Cleanup(failing, nodes.get(failing).getTimeoutId() + 1);
 				nodes.get(failing).resetTimeout(sendToSelf(cleanMsg, cleanupTime));
+
+				// debug
 				log.info("Node {} reported as failed", idFromRef(failing));
 			}
 
 		} else {
+
+			// debug
 			log.warning("Dropped Fail message (expected Id: {}, found: {}) -> {}",
 				nodes.get(failing).getTimeoutId(), failId, msg.toString());
 		}
@@ -342,7 +363,6 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 		// check if the Miss message was still valid
 		if (nodes.get(missing).getTimeoutId() == missId) {
-			log.info("Node {} reported as failed (was missing)", idFromRef(missing));
 
 			// missing node is definitely considered crashed
 			// remove from correct nodes and report to Tracker
@@ -352,6 +372,9 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 			// schedule cleanup
 			final Cleanup cleanMsg = new Cleanup(missing, nodes.get(missing).getTimeoutId() + 1);
 			nodes.get(missing).resetTimeout(sendToSelf(cleanMsg, cleanupTime));
+
+			// debug
+			log.info("Node {} reported as failed (was missing)", idFromRef(missing));
 		}
 	}
 
@@ -368,8 +391,12 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		// check if the Cleanup message was still valid
 		if (nodes.get(failed).getTimeoutId() == cleanId) {
 			nodes.remove(failed);
+
+			//debug
 			log.info("Node {} cleanup", idFromRef(failed));
 		} else {
+
+			// debug
 			log.warning("Dropped Cleanup message (expected Id: {}, found: {}) -> {}",
 				nodes.get(failed).getTimeoutId(), cleanId, msg.toString());
 		}
@@ -390,6 +417,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 
 			// even the probability of gossip to any node
 			nodes.getUpdatableNodes().forEach(ref -> nodes.get(ref).resetQuiescence());
+
+			// debug
 			log.debug("multicast: " + beatsToString(nodes.getBeats()));
 		} else {
 
@@ -412,6 +441,8 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 		// send back node's heartbeats to multicast originator
 		// this is always done regardless of push-pull option
 		reply(new CatastropheReply(nodes.getBeats()));
+
+		//debug
 		log.debug("multicast from {}, beats={}", idFromRef(getSender()), beatsToString(msg.getBeats()));
 	}
 
@@ -423,13 +454,16 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 	}
 
 	private void updateBeats(Map<ActorRef, Long> gossipedBeats) {
-		nodes.getUpdatableNodes().forEach((ref) -> {
-			if (gossipedBeats.containsKey(ref)) {
-				final long beat = gossipedBeats.get(ref);
+		Map<ActorRef, Long> gb = new HashMap<>(gossipedBeats);
+		Set<ActorRef> updatables = new HashSet<>(nodes.getUpdatableNodes());
+		Set<ActorRef> all = new HashSet<>(nodes.getAllNodes());
+
+		gb.forEach((ref, beats) -> {
+			if (updatables.contains(ref)) {
 
 				// if a higher heartbeat counter was gossiped, update it
-				if (beat > nodes.get(ref).getBeatCount()) {
-					nodes.get(ref).setBeatCount(beat);
+				if (beats > nodes.get(ref).getBeatCount()) {
+					nodes.get(ref).setBeatCount(beats);
 
 					// lower the probability of gossiping the same node soon
 					nodes.get(ref).resetQuiescence();
@@ -440,11 +474,20 @@ public final class NodeActor extends AbstractActor implements BaseActor {
 					// restart the timeout
 					final Fail failMsg = new Fail(ref, nodes.get(ref).getTimeoutId() + 1);
 					nodes.get(ref).resetTimeout(sendToSelf(failMsg, failTime));
-				} else {
-
-					// no heartbeat update, increase probability of gossiping the node
-					nodes.get(ref).quiescent();
 				}
+
+			} else if (!all.contains(ref) && ref != getSelf()) { // node was already removed (cleanup)
+
+				// allow nodes to reappear after cleanup (improper, should not happen)
+				nodes.reappear(ref);
+				nodes.get(ref).resetQuiescence();
+				nodes.get(ref).setBeatCount(beats);
+
+				// report to tracker the reappearance
+				sendToTracker(new ReappearReport(ref));
+
+				// debug
+				log.warning("Node {} reappearance", idFromRef(ref));
 			}
 		});
 	}

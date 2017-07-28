@@ -73,7 +73,10 @@ public final class Experiment {
 	private final List<ExpectedCrash> expectedCrashes;
 
 	// reported crashed
-	private final List<ReportedCrash> reportedCrashed;
+	private final List<ReportedCrashOrLife> reportedCrashed;
+
+	// nodes back to life
+	private final List<ReportedCrashOrLife> reappearedNodes;
 
 
 	// start time of the experiment
@@ -145,6 +148,7 @@ public final class Experiment {
 		this.expectedFirstMulticast = builder.expectedFirstMulticast;
 		this.expectedCrashes = expectedCrashes;
 		this.reportedCrashed = new ArrayList<>();
+		this.reappearedNodes = new ArrayList<>();
 		this.start = null;
 		this.stop = null;
 	}
@@ -223,7 +227,21 @@ public final class Experiment {
 			throw new IllegalStateException("Please call the start() method to start the experiment first.");
 		}
 		final long delta = System.currentTimeMillis() - start;
-		reportedCrashed.add(new ReportedCrash(delta, node, reporter));
+		reportedCrashed.add(new ReportedCrashOrLife(delta, node, reporter));
+	}
+
+	/**
+	 * Report a node back to life.
+	 *
+	 * @param node     Node back to life.
+	 * @param reporter Node that reported this.
+	 */
+	public void addReappearedNode(String node, String reporter) {
+		if (start == null) {
+			throw new IllegalStateException("Please call the start() method to start the experiment first.");
+		}
+		final long delta = System.currentTimeMillis() - start;
+		reportedCrashed.add(new ReportedCrashOrLife(delta, node, reporter));
 	}
 
 	/**
@@ -257,6 +275,15 @@ public final class Experiment {
 				.add("reporter", crash.getReporter())
 		));
 
+		// convert reappeared nodes to a JSON array
+		final JsonArrayBuilder reappearedNodesForReport = Json.createArrayBuilder();
+		reappearedNodes.forEach(it -> reportedCrashesForReport.add(
+			Json.createObjectBuilder()
+				.add("delta", it.getDelta())
+				.add("node", it.getNode())
+				.add("reporter", it.getReporter())
+		));
+
 		// generate the JSON report
 		final JsonObject report = Json.createObjectBuilder()
 			.add("id", id)
@@ -281,6 +308,7 @@ public final class Experiment {
 				.add("end_time", stop)
 				.add("expected_crashes", expectedCrashesForReport)
 				.add("reported_crashes", reportedCrashesForReport)
+				.add("reappeared_nodes", reappearedNodesForReport)
 			)
 			.build();
 
