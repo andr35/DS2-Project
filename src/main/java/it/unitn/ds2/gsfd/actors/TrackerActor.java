@@ -405,13 +405,11 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 	private void onReportReappear(ReappearReport msg) {
 		log.info("Report reappearance of node {} (from node {})", idFromRef(msg.getNode()), idFromRef(getSender()));
 
-		// memorize the crash report
-		/*if (current != null) {
-			current.addCrash(idFromRef(msg.getNode()), idFromRef(getSender()));
+		// memorize the report
+		if (current != null) {
+			current.addReappearedNode(idFromRef(msg.getNode()), idFromRef(getSender()));
 		} else {
 			log.error("Reappearance report outside an experiment... there must be an error!");
-		}*/
-
-		// TODO: manage reappearance
+		}
 	}
 }

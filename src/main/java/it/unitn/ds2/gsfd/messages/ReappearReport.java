@@ -5,7 +5,7 @@ import akka.actor.ActorRef;
 import java.io.Serializable;
 
 /**
- * Message used to report a crash to the Tracker.
+ * Message used to report a node thought to be dead to be alive again to the Tracker.
  */
 public final class ReappearReport implements Serializable {
 
