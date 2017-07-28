@@ -188,7 +188,7 @@ export class Script {
         });
       }
 
-      if (!options.initialSeed && options.initialSeed < 0) {
+      if (!options.initialSeed || options.initialSeed < 0) {
         prompts.push({
           type: 'input',
           name: 'initialSeed',

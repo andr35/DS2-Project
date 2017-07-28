@@ -55,7 +55,7 @@ export class LocalMachine implements Cloud {
               ...spawnOptions, env: {ID: i, PORT: (10000 + i)}
             });
           }
-        }, 2000);
+        }, 500);
 
       })
       .catch(() => process.exit(-1));
