@@ -175,8 +175,18 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 		final int repetitions = config.getInt("tracker.repetitions");
 		final int initialSeed = config.getInt("tracker.initial-seed");
 		final long gossipDelta = config.getLong("tracker.gossip-delta");
-		final int minFailureRounds = config.getInt("tracker.min-failure-rounds");
-		final int maxFailureRounds = config.getInt("tracker.max-failure-rounds");
+		int minFailureRounds; // Initialized later depending on push/push-pull strategy
+		int maxFailureRounds; // Initialized later depending on push/push-pull strategy
+
+		// Modified to test different missDelta /////////////////////////////////////////////////////////////
+
+		// Custom "hard-coded" min-max failDelta
+		// P = push , PP = push-pull
+		final int minFailureRoundsP = 17;
+		final int maxFailureRoundsP = 19;
+		final int minFailureRoundsPP = 11;
+		final int maxFailureRoundsPP = 13;
+
 
 		// generate the experiments
 		this.experiments = new ArrayList<>();
@@ -190,16 +200,27 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 				// should I crash only 1 node or 2/3 of them
 				for (boolean simulateCatastrophe : new boolean[]{false, true}) {
 
-					// use different values for failureDelta... multiples of gossipDelta
-					for (int round = maxFailureRounds; round >= minFailureRounds; round -= 2) {
-						final long failureDelta = gossipDelta * round;
+					// use different strategies (push vs push_pull, how to select the nodes)
+					for (boolean pushPull : new boolean[]{false, true}) {
 
-						// use different strategies (push vs push_pull, how to select the nodes)
-						for (boolean pushPull : new boolean[]{false, true}) {
-							for (int pickStrategy = 0; pickStrategy < 4; pickStrategy++) {
+						// try for different failRounds depending on gossip strategy
+						if (pushPull) {
+							minFailureRounds = minFailureRoundsPP;
+							maxFailureRounds = maxFailureRoundsPP;
+						} else {
+							minFailureRounds = minFailureRoundsP;
+							maxFailureRounds = maxFailureRoundsP;
+						}
 
-								// should the node enable the protocol to resist to catastrophes
-								for (boolean enableMulticast : new boolean[]{false, true}) {
+						// use different values for failureDelta... multiples of gossipDelta
+						for (int round = maxFailureRounds; round >= minFailureRounds; round -= 2) {
+							final long failureDelta = gossipDelta * round;
+
+							// Use only pick strategy 0
+							for (int pickStrategy = 0; pickStrategy < 1; pickStrategy++) {
+
+								// Use always multicast (experiment's aim is trying different missDelta values)
+								for (boolean enableMulticast : new boolean[]{true}) {
 
 									// build the experiment with the parameters used so far...
 									final Experiment.Builder builder = new Experiment.Builder()
@@ -221,7 +242,17 @@ public final class TrackerActor extends AbstractActor implements BaseActor {
 										for (long maxWait : new long[]{failureDelta}) {
 
 											// try different miss_time
-											for (long missDelta : new long[]{failureDelta, failureDelta * 2}) {
+											// Try for missDelta factors: 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0
+											for (long missDelta : new long[]{
+												(long) (failureDelta * 0.25),
+												(long) (failureDelta * 0.50),
+												(long) (failureDelta * 0.75),
+												(long) (failureDelta * 1.00),
+												(long) (failureDelta * 1.25),
+												(long) (failureDelta * 1.50),
+												(long) (failureDelta * 1.75),
+												(long) (failureDelta * 2.00)
+											}) {
 
 												// try different values for the parameter a -> regulate the first expected multicast
 												for (double fractionOfFailTime : new double[]{1.0 / 2.0}) {
