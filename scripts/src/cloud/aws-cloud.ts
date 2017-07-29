@@ -557,27 +557,29 @@ export class AwsCloud implements Cloud {
 
       try {
         for (let instanceId in this.nodes) {
-          // Check if node is running
-          const running = await this.isMachineRunning(this.nodes[instanceId]);
-          if (running) {
-            // Update instance info (get ip address)
-            this.nodes[instanceId].instance = await this.getInstance(this.nodes[instanceId]);
-            // try to deploy
-            this.tryDeploy(this.nodes[instanceId])
-              .then(machine => {
-                if (isObjectEmpty(this.nodes)) { // Ok, all nodes deployed
-                  return resolve();
-                } else { // Some nodes still need to be deployed
-                  if (machine.tracker) {
-                    // Trigger immediately a new timeout
-                    console.log(chalk.bold.green('> Tracker bootstrapped! Triggering a new deploy timeout...'));
-                    this.startDeployTimeout(300, resolve);
+          if (this.nodes[instanceId]) {
+            // Check if node is running
+            const running = await this.isMachineRunning(this.nodes[instanceId]);
+            if (running) {
+              // Update instance info (get ip address)
+              this.nodes[instanceId].instance = await this.getInstance(this.nodes[instanceId]);
+              // try to deploy
+              this.tryDeploy(this.nodes[instanceId])
+                .then(machine => {
+                  if (isObjectEmpty(this.nodes)) { // Ok, all nodes deployed
+                    return resolve();
+                  } else { // Some nodes still need to be deployed
+                    if (machine.tracker) {
+                      // Trigger immediately a new timeout
+                      console.log(chalk.bold.green('> Tracker bootstrapped! Triggering a new deploy timeout...'));
+                      this.startDeployTimeout(300, resolve);
+                    }
                   }
-                }
-              })
-              .catch(err => {
-                console.log(chalk.magenta('> Timeout report:'), err);
-              });
+                })
+                .catch(err => {
+                  console.log(chalk.magenta('> Timeout report:'), err);
+                });
+            }
           }
         }
       } catch (err) {
