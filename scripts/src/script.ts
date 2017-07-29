@@ -165,7 +165,7 @@ export class Script {
         prompts.push({
           type: 'input',
           name: 'minFailureRounds',
-          message: 'Min number of rounds of gossip after which a node should be considered failed',
+          message: 'Min number of rounds of gossip after which a node should be considered failed?',
           validate: input => greaterThanZero(input)
         });
       }
@@ -174,7 +174,7 @@ export class Script {
         prompts.push({
           type: 'input',
           name: 'maxFailureRounds',
-          message: 'Max number of rounds of gossip after which a node should be considered failed',
+          message: 'Max number of rounds of gossip after which a node should be considered failed?',
           validate: input => greaterThanZero(input)
         });
       }
@@ -183,7 +183,7 @@ export class Script {
         prompts.push({
           type: 'input',
           name: 'missDeltaRounds',
-          message: 'Number of delta rounds to calculate the miss time',
+          message: 'Number of delta rounds to calculate the miss time?',
           validate: input => greaterThanZero(input)
         });
       }

@@ -562,7 +562,9 @@ export class AwsCloud implements Cloud {
             const running = await this.isMachineRunning(this.nodes[instanceId]);
             if (running) {
               // Update instance info (get ip address)
-              this.nodes[instanceId].instance = await this.getInstance(this.nodes[instanceId]);
+              if (!this.nodes[instanceId].instance.PublicIpAddress) {
+                this.nodes[instanceId].instance = await this.getInstance(this.nodes[instanceId]);
+              }
               // try to deploy
               this.tryDeploy(this.nodes[instanceId])
                 .then(machine => {
