@@ -414,7 +414,7 @@ def main(x_scale_gossip_rounds, reports_path, output_path):
         path=output_path + os.sep,
         prefix='correct__',
         x_scale_rounds=x_scale_gossip_rounds,
-        y_scale_limits=[0, 50],
+        y_scale_limits=([0, 50] if x_scale_gossip_rounds else [0, 20]),
     )
 
     # plot 2: percentage correctly detected
