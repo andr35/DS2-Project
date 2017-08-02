@@ -21,12 +21,6 @@ def _plot(frame, path, experiment, strategy, catastrophe, multicast,
     """
     Plot the average detection time as a function of the fail time.
     It compares push and push_pull with different failure times.
-    :param frame: Pandas frame with all the data.
-    :param path: Base path where to store the plot.
-    :param experiment: Experiment name.
-    :param strategy: Pick Strategy.
-    :param catastrophe: Simulate catastrophe.
-    :param multicast: Enable multicast.
     """
 
     # filter
@@ -76,7 +70,7 @@ def _plot(frame, path, experiment, strategy, catastrophe, multicast,
             ax.plot(
                 trace['failure_delta'] / delta,
                 trace[y_trace] / delta,
-                label='%s - %s' % ('PushPull' if push_pull else 'Push', 'correct' if correct else 'wrong'),
+                label='%s - %s' % ('Push-Pull' if push_pull else 'Push', 'correct' if correct else 'wrong'),
                 marker='o' if correct else 'x',
                 linestyle=('-' if push_pull else '-.'),
                 color=colors[(push_pull, correct)],
@@ -97,12 +91,6 @@ def plot_average(frame, path, experiment, strategy, catastrophe, multicast):
     """
     Plot the average detection time as a function of the fail time.
     It compares push and push_pull with different failure times.
-    :param frame: Pandas frame with all the data.
-    :param path: Base path where to store the plot.
-    :param experiment: Experiment name. 
-    :param strategy: Pick Strategy.
-    :param catastrophe: Simulate catastrophe.
-    :param multicast: Enable multicast.
     """
 
     _plot(
@@ -124,12 +112,6 @@ def plot_first(frame, path, experiment, strategy, catastrophe, multicast):
     """
     Plot the first detection time as a function of the fail time.
     It compares push and push_pull with different failure times.
-    :param frame: Pandas frame with all the data.
-    :param path: Base path where to store the plot.
-    :param experiment: Experiment name.
-    :param strategy: Pick Strategy.
-    :param catastrophe: Simulate catastrophe.
-    :param multicast: Enable multicast.
     """
 
     _plot(
@@ -151,12 +133,6 @@ def plot_last(frame, path, experiment, strategy, catastrophe, multicast):
     """
     Plot the latest detection time as a function of the fail time.
     It compares push and push_pull with different failure times.
-    :param frame: Pandas frame with all the data.
-    :param path: Base path where to store the plot.
-    :param experiment: Experiment name.
-    :param strategy: Pick Strategy.
-    :param catastrophe: Simulate catastrophe.
-    :param multicast: Enable multicast.
     """
 
     _plot(
@@ -172,6 +148,70 @@ def plot_last(frame, path, experiment, strategy, catastrophe, multicast):
         scale_normal=[0, 40],
         legend='upper left'
     )
+
+
+def plot_miss_time(frame, path, experiment, strategy, catastrophe, multicast):
+    """
+    Plot the latest detection time as a function of the miss time.
+    It compares push and push_pull with different failure times.
+    """
+
+    # filter
+    data = frame[frame['group'].str.match('.*%s.*' % re.escape(experiment))] \
+        .query('pick_strategy == %d' % strategy) \
+        .query('simulate_catastrophe == %s' % catastrophe) \
+        .query('enable_multicast == %s' % multicast)
+
+    # aggregate
+    aggregation = data.groupby(['ratio_miss_delta', 'push_pull', 'gossip_delta'], as_index=False).agg(
+        {
+            'correct': {
+                'aggregated_correct': (lambda column: False not in list(column))
+            },
+            'detect_time_average': {
+                'aggregated_detect_time_average': correct_mean
+            }
+        }
+    )
+    aggregation.columns = aggregation.columns.droplevel(1)
+
+    # extract the gossip delta
+    deltas = aggregation['gossip_delta'].unique()
+    assert len(deltas) == 1
+    delta = deltas[0]
+
+    # colors (push_pull, correct -> color)
+    colors = {
+        (True, True): 'g',
+        (True, False): 'r',
+        (False, True): 'b',
+        (False, False): mpl.colors.CSS4_COLORS['darkorange']
+    }
+
+    # plot
+    figure = plt.figure()
+    ax = figure.add_subplot(111)
+    for push_pull in [True, False]:
+        for correct in [True, False]:
+            trace = aggregation.query('push_pull == %s' % push_pull).query('correct == %s' % correct)
+            ax.plot(
+                trace['ratio_miss_delta'],
+                trace['detect_time_average'] / delta,
+                label='%s - %s' % ('Push-Pull' if push_pull else 'Push', 'correct' if correct else 'wrong'),
+                marker='o' if correct else 'x',
+                linestyle=('-' if push_pull else '-.'),
+                color=colors[(push_pull, correct)],
+            )
+    ax.set_ylim([0, 70])
+    ax.legend(shadow=True, loc='lower right')
+    ax.set_title('Average Failure Detection Time')
+    ax.set_xlabel('Miss Time / Fail Time')
+    ax.set_ylabel('Detection Time (rounds of gossip)')
+    ax.tick_params(axis='both', which='major')
+    ax.grid(True)
+    ax.xaxis.set_ticks(list(set(aggregation['ratio_miss_delta'])))
+    figure.savefig(path, bbox_inches='tight')
+    plt.close(figure)
 
 
 @click.command()
@@ -199,15 +239,18 @@ def main(reports_path, output_path, use_cache):
     # plots
     prefix = output_path + os.sep
 
-    plot_average(frame, prefix + 'n50__average__no_catastrophe__no_multicast.pdf', '2407_n50', 0, False, False)
-    plot_average(frame, prefix + 'n50__average__catastrophe__no_multicast.pdf', '2407_n50', 0, True, False)
-    plot_average(frame, prefix + 'n50__average__catastrophe__multicast.pdf', '2407_n50', 0, True, True)
+    plot_average(frame, prefix + 'n50__average__s0__no_catastrophe__no_multicast.pdf', '2407_n50', 0, False, False)
+    plot_average(frame, prefix + 'n50__average__s0__catastrophe__no_multicast.pdf', '2407_n50', 0, True, False)
+    plot_average(frame, prefix + 'n50__average__s1__catastrophe__no_multicast.pdf', '2407_n50', 1, True, False)
+    plot_average(frame, prefix + 'n50__average__s0__catastrophe__multicast.pdf', '2407_n50', 0, True, True)
 
-    plot_first(frame, prefix + 'n50__first__no_catastrophe__no_multicast.pdf', '2407_n50', 0, False, False)
-    plot_first(frame, prefix + 'n50__first__catastrophe__multicast.pdf', '2407_n50', 0, True, True)
+    plot_first(frame, prefix + 'n50__first__s0__no_catastrophe__no_multicast.pdf', '2407_n50', 0, False, False)
+    plot_first(frame, prefix + 'n50__first__s0__catastrophe__multicast.pdf', '2407_n50', 0, True, True)
 
-    plot_last(frame, prefix + 'n50__last__no_catastrophe__no_multicast.pdf', '2407_n50', 0, False, False)
-    plot_last(frame, prefix + 'n50__last__catastrophe__multicast.pdf', '2407_n50', 0, True, True)
+    plot_last(frame, prefix + 'n50__last__s0__no_catastrophe__no_multicast.pdf', '2407_n50', 0, False, False)
+    plot_last(frame, prefix + 'n50__last__s0__catastrophe__multicast.pdf', '2407_n50', 0, True, True)
+
+    plot_miss_time(frame, prefix + 'n50__miss_times.pdf', 'multi_miss_delta', 0, True, True)
 
 
 # entry point for the script
