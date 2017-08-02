@@ -199,16 +199,15 @@ def main(reports_path, output_path, use_cache):
     # plots
     prefix = output_path + os.sep
 
-    plot_average(frame, prefix + 'n50__average__no_catastrophe__no_multicast.png', '2407_n50', 0, False, False)
-    plot_average(frame, prefix + 'n50__average__catastrophe__no_multicast.png', '2407_n50', 0, True, False)
-    plot_average(frame, prefix + 'n50__average__catastrophe__multicast.png', '2407_n50', 0, True, True)
+    plot_average(frame, prefix + 'n50__average__no_catastrophe__no_multicast.pdf', '2407_n50', 0, False, False)
+    plot_average(frame, prefix + 'n50__average__catastrophe__no_multicast.pdf', '2407_n50', 0, True, False)
+    plot_average(frame, prefix + 'n50__average__catastrophe__multicast.pdf', '2407_n50', 0, True, True)
 
-    plot_first(frame, prefix + 'n50__first__no_catastrophe__no_multicast.png', '2407_n50', 0, False, False)
-    plot_first(frame, prefix + 'n50__first__catastrophe__multicast.png', '2407_n50', 0, True, True)
+    plot_first(frame, prefix + 'n50__first__no_catastrophe__no_multicast.pdf', '2407_n50', 0, False, False)
+    plot_first(frame, prefix + 'n50__first__catastrophe__multicast.pdf', '2407_n50', 0, True, True)
 
-    plot_last(frame, prefix + 'n50__last__no_catastrophe__no_multicast.png', '2407_n50', 0, False, False)
-    plot_last(frame, prefix + 'n50__last__catastrophe__multicast.png', '2407_n50', 0, True, True)
-
+    plot_last(frame, prefix + 'n50__last__no_catastrophe__no_multicast.pdf', '2407_n50', 0, False, False)
+    plot_last(frame, prefix + 'n50__last__catastrophe__multicast.pdf', '2407_n50', 0, True, True)
 
 
 # entry point for the script
