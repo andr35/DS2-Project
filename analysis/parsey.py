@@ -183,9 +183,8 @@ def parse_report(group, path):
 
     # [statistic]: first and last detection time
     if n_detected > 0:
-        detections = correct_crashes.values()
-        detect_time_first = min(detections)
-        detect_time_last = max(detections)
+        detect_time_first = min(delays)
+        detect_time_last = max(delays)
     else:
         detect_time_first = -1
         detect_time_last = -1
