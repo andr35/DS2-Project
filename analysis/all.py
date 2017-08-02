@@ -24,21 +24,22 @@ def plot_generic(frame, path, prefix='', x_scale_rounds=True, y_axis='detect_tim
     x_axis = ['failure_delta']
 
     # do not aggregate
-    aggregate_none = ['id', 'seed', 'repetition', 'multicast_max_wait', 'miss_delta', 'multicast_parameter',
+    aggregate_none = ['id', 'group', 'seed', 'repetition', 'multicast_max_wait', 'miss_delta', 'multicast_parameter',
                       'expected_first_multicast', 'duration']
 
     # aggregate, plot on the same graph
     aggregate_same = ['push_pull']
 
     # aggregate, on different plots
-    aggregate_different = ['group', 'number_of_nodes', 'simulate_catastrophe', 'n_scheduled_crashes',
+    aggregate_different = ['number_of_nodes', 'simulate_catastrophe', 'n_scheduled_crashes',
                            'gossip_delta', 'enable_multicast', 'ratio_max_wait_and_failure',
                            'ratio_expected_first_multicast', 'ratio_miss_delta', 'pick_strategy']
 
     # ignored fields -> these are the statistics
     stats = ['correct', 'n_expected_detected_crashes', 'n_correctly_detected_crashes',
              'n_duplicated_reported_crashes', 'n_wrongly_reported_crashes', 'n_reappeared',
-             'rate_detected_crashes', 'detect_time_average', 'detect_time_stdev']
+             'rate_detected_crashes', 'detect_time_average', 'detect_time_stdev',
+             'detect_time_first', 'detect_time_last']
 
     # security check
     missing = set(frame.columns.values) - set(x_axis + aggregate_none + aggregate_same + aggregate_different + stats)
@@ -164,7 +165,8 @@ def plot_miss_delta(frame, path, prefix='', y_scaler_enable=True, y_scale_rounds
     # ignored fields -> these are the statistics
     stats = ['correct', 'n_expected_detected_crashes', 'n_correctly_detected_crashes',
              'n_duplicated_reported_crashes', 'n_wrongly_reported_crashes', 'n_reappeared',
-             'rate_detected_crashes', 'detect_time_average', 'detect_time_stdev']
+             'rate_detected_crashes', 'detect_time_average', 'detect_time_stdev',
+             'detect_time_first', 'detect_time_last']
 
     # security check
     missing = set(frame.columns.values) - set(x_axis + aggregate_none + aggregate_same + aggregate_different + stats)

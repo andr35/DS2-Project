@@ -51,7 +51,9 @@ Experiment = collections.namedtuple('Experiment', [
     'n_reappeared',
     'rate_detected_crashes',
     'detect_time_average',
-    'detect_time_stdev'
+    'detect_time_stdev',
+    'detect_time_first',
+    'detect_time_last'
 ])
 
 
@@ -179,6 +181,15 @@ def parse_report(group, path):
         click.echo('WARNING: experiment "%s" has only 0 or 1 detected failures... set st.dev to -1' % _id)
         detect_time_stdev = -1
 
+    # [statistic]: first and last detection time
+    if n_detected > 0:
+        detections = correct_crashes.values()
+        detect_time_first = min(detections)
+        detect_time_last = max(detections)
+    else:
+        detect_time_first = -1
+        detect_time_last = -1
+
     # return the results
     return Experiment(
 
@@ -217,7 +228,9 @@ def parse_report(group, path):
         n_reappeared=n_reappeared,
         rate_detected_crashes=rate_detected_crashes,
         detect_time_average=detect_time_average,
-        detect_time_stdev=detect_time_stdev
+        detect_time_stdev=detect_time_stdev,
+        detect_time_first=detect_time_first,
+        detect_time_last=detect_time_last
     )
 
 
