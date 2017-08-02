@@ -115,10 +115,8 @@ def parse_report(group, path):
 
     # check if all crashed are correct (and unique)
     correct_crashes = {}
-    duplicated_crashes = {}
-    wrong_crashes = {}
-
-    # TODO: rate duplicati e wrong corretti
+    duplicated_crashes = []
+    wrong_crashes = []
 
     # analyze the crashes
     for crash in reported_crashes:
@@ -127,21 +125,20 @@ def parse_report(group, path):
         delta = crash['delta']
         key = NodeAndReporter(node=node, reporter=reporter)
 
-        # classify the experiment
-        if node in expected_crashes_map:
-            expected_delta = expected_crashes_map[node]
+        # crash is correct
+        if node in expected_crashes_map and delta >= expected_crashes_map[node]:
 
-            # a) crash is correct AND not duplicated
-            if delta >= expected_delta and key not in correct_crashes:
+            # a) AND not duplicated
+            if key not in correct_crashes:
                 correct_crashes[key] = delta
 
             # b) crash is correct BUT duplicated
             else:
-                duplicated_crashes[key] = delta
+                duplicated_crashes.append(crash)
 
         # c: crash is NOT correct
         else:
-            wrong_crashes[key] = delta
+            wrong_crashes.append(crash)
 
     # [statistic]: rate of detected crashes
     n_scheduled = len(expected_crashes)
@@ -163,6 +160,7 @@ def parse_report(group, path):
     correct = (n_expected_detected == n_detected and n_duplicated == 0 and n_wrong == 0 and n_reappeared == 0)
 
     # [statistic]: performances - average time to detect crashes
+    # in case of duplicated, consider the first detection
     delays = []
     for key, delta in correct_crashes.items():
         node = key.node
@@ -543,7 +541,7 @@ def main(miss_delta, x_scale_gossip_rounds, reports_path, output_path):
             path=output_path + os.sep,
             prefix='correct__',
             x_scale_rounds=x_scale_gossip_rounds,
-            y_scale_limits=([0, 50] if x_scale_gossip_rounds else [0, 20]),
+            y_scale_limits=([0, 60] if x_scale_gossip_rounds else [0, 20]),
         )
 
         # plot 2: percentage correctly detected
