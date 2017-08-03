@@ -160,7 +160,8 @@ def plot_miss_time(frame, path, experiment, strategy, catastrophe, multicast):
     data = frame[frame['group'].str.match('.*%s.*' % re.escape(experiment))] \
         .query('pick_strategy == %d' % strategy) \
         .query('simulate_catastrophe == %s' % catastrophe) \
-        .query('enable_multicast == %s' % multicast)
+        .query('enable_multicast == %s' % multicast) \
+        .query('(failure_delta == 2200 and push_pull == True) or (failure_delta == 3800 and push_pull == False)')
 
     # aggregate
     aggregation = data.groupby(['ratio_miss_delta', 'push_pull', 'gossip_delta'], as_index=False).agg(
