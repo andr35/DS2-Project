@@ -1,0 +1,19 @@
+\section{Evaluation Metrics}
+\label{sec:metrics}
+
+Our aim is to build a perfect failure detector.
+A perfect failure detector has 2 properties: strong completeness (every crashed process is eventually reported to the tracker) and strong accuracy (no false positives are reported).
+
+An experiment is considered unsuccessful if any of these circumstances occur:
+\begin{itemize}
+    \item a faulty node is not reported by all correct nodes
+    \item a faulty node is reported before the expected crash happens
+    \item there are reappearance reports
+    \item there are duplicated crash reports
+\end{itemize}
+
+We measure the average detection time, expecting it to grow similarly to $T_{fail}$.
+The first detection time will be not much greater than $T_{fail}$.
+With catastrophe recovery, we cannot have a correct report earlier than $T_{fail} + T_{miss}$ after the crash.
+In general, we expect the maximum delay for detection to never exceed $2 \cdot T_{fail}$, or $2 \cdot (T_{fail} + T_{miss})$ with catastrophe recovery.
+Clearly, the actual value depends on the required time needed to spread the information. 

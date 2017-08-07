@@ -1,0 +1,33 @@
+\section{Variants}
+\label{sec:variants}
+
+We propose two different variants to the original protocol.
+The first one is related to the way the nodes gossip with each other.
+The second one is about how nodes chooses their peers.
+We discuss the effect of these changes in \cref{sec:experiments}.
+
+
+\subsection{Push-Pull}
+The protocol described in the original paper uses the Pull approach.
+In other words, a node selects its peer and sends it a message with some information.
+The peer receives the message but does not reply.
+
+The Push-Pull approach introduces an additional step.
+The selected peer receives the message, updates its local knowledge about the systems and replies to the sender with its up-to-date information.
+The sender receives the reply and updates its own one.
+The idea behind Push-Pull is to spread the information as fast as possible.
+
+
+\subsection{Peer Selection Strategy}
+In the basic protocol, each node selects its peer randomly at each round of gossip.
+We propose some different peer selection strategies that try to exploit the local knowledge to make a better choice.
+
+\paragraph*{Quiescence}
+The probability to select a node is linear with respect to its quiescence, i.e. the difference (in gossip intervals) between the current time and the last heartbeat update received for that node.
+
+\paragraph*{Squared Quiescence}
+The probability to select a node is proportional to the square of its quiescence.
+
+\paragraph*{Highest Quiescence}
+Always select the node with the oldest update.
+If more than one node share the oldest update time, select one randomly.

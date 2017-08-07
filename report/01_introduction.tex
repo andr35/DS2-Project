@@ -1,0 +1,28 @@
+\section{Introduction}
+\label{sec:introduction}
+
+A failure detector can be described as a distributed oracle that provides information about the state of the other processes in the system.
+From a practical point of view, it is a service that detects when the other processes are not available, for instance when they crash or become not reachable.
+Failure detectors can be used to solve difficult problems in distributed systems, such as reliable broadcast, consensus and group membership.
+
+A simple way to build a failure detector is to periodically ping each other process.
+On the one hand, the idea is effective and easy to implement; on the other hand, the resulting protocol is very inefficient, since it produces $O(n^2)$ messages every ``round'' (where $n$ is the number of the processes).
+For extreme distributed systems, this approach does not scale.
+
+An alternative approach to build failure detectors is to use gossip.
+In gossip-based protocols, processes exchange information with random peers at regular intervals.
+In our case, they exchange information about the processes which are still gossiping:
+if a process does not gossip anymore, it is probably crashed or unreachable.
+This approach was firstly proposed by Van Renesse, Minsky and Hayden in 1998 in the paper ``A Gossip-Style Failure Detection Service'' \cite{gsfd}.
+The authors describe a protocol based on gossip to provide timely and efficient failure detection and provide a backup protocol based on broadcast to recover from catastrophes (for example, when half of the nodes crashes at the same time).
+
+In this work, we implement and test a protocol based on the original paper.
+We try some modifications to the original proposal and measure their effect.
+We also tune the performances to match the computing power and network capabilities of modern distributed systems.
+
+\cref{sec:paper} describes in detail the original work.
+\cref{sec:variants} shows some little modifications to improve the protocol.
+\cref{sec:implementation} describes how we implement the protocol.
+\cref{sec:metrics} shows how we evaluate and test the protocol.
+Finally, \cref{sec:experiments} discuss which modifications help the original protocol and which do not.
+To conclude, we describe a simple yet effective way to tune the performances based on real world needs.

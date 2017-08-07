@@ -1,0 +1,88 @@
+\section{Implementation}
+\label{sec:implementation}
+
+The implementation is based on the description of the original paper.
+We make some simplifying assumptions so that testing the protocol is simpler, but do not alter the core concepts of the algorithm.
+
+\subsection{Assumptions}
+
+We make the following assumptions about the system:
+\begin{itemize}
+    \item asynchronous system (no strict bounds on message delivery time, we just assume the network operates reasonably)
+    \item nodes know each other
+    \item nodes can not join or leave the system during an experiment run
+    \item fail-stop failure model (no Byzantine behaviour is allowed)
+\end{itemize}
+
+The protocol is implemented using Akka\footnote{\url{http://akka.io/}}, a framework for the Java Virtual Machine to build distributed systems based on the actor pattern.
+Akka provides a simple API to create actors and asynchronously send messages between them.
+The framework hides the network communication and takes care to build and maintain the overlay network between the actors.
+
+\subsection{Tracker}
+The tracker actor has the role to run the experiments needed to test the gossip protocol.
+It tracks the nodes of the system, runs the experiments, collects the failures detected by each node and generates a report with the results for further offline elaboration.
+
+The tracker runs on a dedicated machine with a public IP address known to all nodes.
+When a new node is started, it registers immediately to the tracker and waits for instructions.
+Depending on its configuration, the tracker waits until a certain number of nodes join the system.
+Once the number is reached, the tracker generates a list of experiments to perform.
+
+The experiments are run one at a time, in a sequential order.
+Upon an experiment start, the tracker sends a start message to each node:
+the start message contains the list of nodes running the current experiment and the parameters to use for the gossip protocol.
+Since it is unrealistic that a node crashes during an experiment, node failures are simulated.
+The tracker schedules a list of failures and instruct the nodes to crash at some fixed delta of time after the start of the experiment.
+Nodes asked to simulate a failure simply stop to send or reply to any message coming from other nodes (with the exception of the tracker).
+Every time a node detects a failure, it reports it to the tracker.
+
+At the end of the experiment (i.e. after some fixed time), the tracker send a stop message to all nodes.
+Before starting the next experiment, the tracker generates a report with the settings of the experiment, the scheduled crashes and the reported ones.
+The report is exported as a \texttt{JSON} file and stored on the disk.
+At this point, the tracker waits some time to make sure all nodes received the stop message, then starts the new experiment.
+When the nodes receive a stop message, they stop to gossip with each other and reset the internal state: they are ready for the next experiment.
+
+
+\subsection{Node}
+The node actor implements the gossip-based failure detector.
+
+If asked by the tracker at the start of an experiment, a node schedules a crash simulation to happen at the specified time.
+
+Each node keeps a structure with all nodes in the system and their relative heartbeat counters.
+This is the information exchanged in the gossip protocol.
+Another structure contains those nodes that are considered correct:
+their heartbeat counters can be updated and they can be selected as gossip recipient.
+
+If the backup protocol to resist to catastrophes is enabled, nodes that may be still correct but whose state is currently unknown are saved in a disjoint subset, and are considered ``missing''.
+A node that is missing cannot be selected as a gossip recipient.
+However, if a message is received that would increment the heartbeat counter of a missing node, that node is restored as correct.
+Practically, once $T_{fail}$ is exhausted, an additional timer $T_{miss}$ is started.
+After $T_{miss}$, except if the node was restored as correct, it is reported to the tracker as failed.
+The multicast protocol is configured so that nodes wait at most a time equal to $T_{fail}$ to multicast, and generally it happens at around $T_{fail}/2$.
+A node decides whether to multicast or not every second, and the probability increases each time it is postponed, until either the attempt is successful or it receives a multicast message from another node.
+Once a node receives the special message, it sends back its structure with heartbeats.
+The purpose of the protocol is to help spreading updated information.
+The maximum wait for multicast is set to be equal to $T_{fail}$ in order to have that information readily available after the catastrophe, after $T_{fail}$ in the worst case.
+Assuming this, $T_{miss}$ can more easily be decided.
+
+The structure with all nodes of the system may contain some that is neither missing nor correct.
+Those are considered failed.
+They will be finally removed only after $T_{cleanup}$.
+
+A node may reappear at some nodes if its heartbeat counter is still circulating in the network inside gossip messages after $T_{cleanup}$.
+Since we assume each node always has knowledge of all the others, waiting $T_{cleanup}$ would be unnecessary:
+a node can simply ignore the heartbeat counter associated to a node it considers failed, since it can just decide to never restore a node.
+If instead the system could change and possibly grow, a cleanup mechanism would be required.
+It is implemented to confirm the soundness of setting $T_{cleanup}$ to $2 \cdot T_{fail}$.
+
+All timers described are implemented as scheduled messages from a node to itself.
+These messages can be cancelled before they are sent.
+For example, a ``fail'' message is scheduled to happen after $T_{fail}$.
+When the heartbeat counter of the relative node is updated, that incoming message is cancelled and a new one is scheduled. Each message has an incremental ID, so that those that should have been cancelled can be recognized and behaviour can be kept consistent even when more messages are enqueued in the node's mailbox.
+
+
+\subsection{Remote machines}
+
+To perform the experiments, the system (tracker and nodes) has been deployed and ran multiple times on different EC2 machines spread around the world (America, Europe, Asia) on the AWS Cloud\footnote{\url{https://aws.amazon.com/ec2/}}.
+A simple command line script to start, stop and manage the experiments has been developed.
+For each experiment, the CLI allows us to automatically create one instance of an EC2 machine for each node, deploy our project on the machines, configure the parameters of the experiment and start it in a quick way.
+Moreover, the script allows us to keep watching the status of the experiments while they are running, to download the results from the tracker machine once they are finished and shutdown the system.

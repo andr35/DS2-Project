@@ -1,0 +1,78 @@
+\documentclass[conference]{IEEEtran}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{silence}\WarningsOff[latexfont]
+
+\usepackage{amsmath}
+\usepackage{nicefrac}
+
+\usepackage{graphicx}
+\usepackage{cite}
+\usepackage{url}
+\usepackage[caption=false,font=footnotesize]{subfig}
+\usepackage[binary-units,per-mode=symbol]{siunitx}
+\sisetup{list-final-separator = {, and }}
+\usepackage{booktabs}
+\usepackage{pifont}
+\usepackage{microtype}
+\usepackage{textcomp}
+\usepackage[american]{babel}
+\usepackage[noabbrev,capitalise]{cleveref}
+\usepackage{xspace}
+\usepackage{hyphenat}
+\usepackage[draft,inline,nomargin,index]{fixme}
+\fxsetup{theme=color}
+\usepackage{grffile}
+\usepackage{xfrac}
+\usepackage{multirow}
+\RequirePackage{xstring}
+\RequirePackage{xparse}
+\RequirePackage[index=true]{acro}
+\NewDocumentCommand\acrodef{mO{#1}mG{}}{\DeclareAcronym{#1}{short={#2}, long={#3}, #4}}
+\NewDocumentCommand\acused{m}{\acuse{#1}}
+\usepackage{upquote}
+
+\begin{document}
+
+\title{
+	A Gossip-Style Failure Detection Service \\
+    \large Distributed Systems 2 - Final Project - University of Trento
+}
+
+\author{
+	\IEEEauthorblockN{Andrea Zorzi}
+	\IEEEauthorblockA{\small Matriculation number: 190964 \\ andrea.zorzi-1@studenti.unitn.it}
+    \and
+    \IEEEauthorblockN{Davide Vecchia}
+    \IEEEauthorblockA{\small Matriculation number: 188776 \\ davide.vecchia@studenti.unitn.it}
+    \and
+    \IEEEauthorblockN{Davide Pedranz}
+    \IEEEauthorblockA{\small Matriculation number: 189295 \\ davide.pedranz@studenti.unitn.it}
+}
+
+\maketitle
+
+\begin{abstract}
+Failure detection allows to solve traditionally difficult problems in distributed systems,
+such as reliable broadcast and consensus.
+In this work, we implement and test a gossip based failure detection service.
+We describe the basic protocol on which this work is based and some variants;
+then, we describe how we experimentally tested and tuned the systems;
+finally, we analyse the obtained results and give suggestions on how to choose the best parameters based on the needed performances of the failure detector for real-world systems.
+\end{abstract}
+
+\acresetall
+
+\input{01_introduction}
+\input{02_paper}
+\input{03_variants}
+\input{04_implementation}
+\input{05_metrics}
+\input{06_results}
+\input{07_conclusions}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

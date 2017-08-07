@@ -1,0 +1,41 @@
+\section{Original Work}
+\label{sec:paper}
+
+The protocol presented in the paper is able to detect failures with some specified probability of mistake (false positive),
+with the valuable property that the detection time scales as \nobreak{$O(n\nobreak\hspace{.08em}\cdot\nobreak\hspace{.08em}log(n))$} with respect to the number of nodes.
+The protocol is not able to discriminate between a crashed node from a slow or unreachable one (e.g. communication failures):
+a detection is interpreted as a general ``the node is not available''.
+Each node has a ``heartbeat'' counter which is incremented at each round of gossip.
+Periodically, each node exchanges its own and the others counters with a random peer.
+If a node does not hear any heartbeat update for some node for a given time, it assumes it has crashed.
+
+At the beginning of the protocol, each node activates a timer $T_{gossip}$.
+Upon timeout, it increments its own heartbeat counter.
+Then, it randomly selects another node to infect and sends the most recent heartbeat counter it knows for each member.
+Finally, the timer is restarted.
+
+For each node of the system, a timer $T_{fail}$ is set and the countdown is started.
+Upon timeout, the relative node is considered failed.
+$T_{fail}$ is chosen so that there is a really low probability that any node's timeout triggers before the ``infection'' (the update on a heartbeat counter) arrives to all members.
+
+When a node receives a gossip message with current heartbeat counters of the sender,
+it updates those counters it stores locally that are lower than the received ones.
+If a heartbeat counter is updated, the timer associated to that node is reset to $T_{fail}$.
+
+With some modification, the protocol can resist a ``catastrophe'', i.e. when many nodes become simultaneously unavailable (for example due to a network failure that separates groups of nodes).
+In case of a catastrophe, some additional time is required to prevent correct nodes from reporting each other as failed.
+This happens because a portion of messages is wasted gossiping with unavailable nodes, so the protocol between correct nodes not only has a virtually increased gossip interval, but also has a slower progression because messages towards those unavailable nodes do not contribute to progress.
+Information on heartbeat counters has not enough time to infect the whole network, causing those false positives.
+Together with the extra time, a multicast protocol is enabled.
+With some probability that grows over time, nodes will send a special message to all the others and wait for a reply to obtain the most up-to-date heartbeat counters.
+If tuned correctly, this parameter ensures that one surviving node will be able to gossip an information that will keep nodes of the correct portion from reporting each other, making the recovery more reliable. 
+
+If catastrophe recovery is enabled, a node is not immediately reported after $T_{fail}$, but during the additional time it can not be chosen to be a gossip recipient (restoring the natural gossip interval of the system as well as the statistical guarantees for progression).
+Eventually, all correct nodes will hear updates of each other and restart the $T_{fail}$ timer.
+
+Once a node marks another one as failed, it waits a time $T_{cleanup} = 2 \cdot T_{fail}$ before removing its association with the heartbeat counter in the gossiped list.
+This is done to prevent the reappearance of a failed node.
+Consider a node F reported as failed and undergoing cleanup.
+Of course, the heartbeat counter of F can not be updated.
+It is safe to wait $2 \cdot T_{fail}$ before removing F:
+after $T_{fail}$ every process is infected by updates on F that may be still circulating, and then after another $T_{fail}$ - since there is no new circulating infection - every node considers F failed and thus will not update its heartbeat counter.

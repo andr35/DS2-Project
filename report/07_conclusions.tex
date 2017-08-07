@@ -1,0 +1,28 @@
+\section{Conclusions}
+\label{sec:conclusions}
+
+In this work, we implemented a gossip-based protocol based on the paper ``A Gossip-Style Failure Detection Service'' of Van Renesse, Minsky and Hayden.
+We tested and validated with multiple experiments in normal and extreme conditions the validity of the gossip approach to build a perfect failure detector.
+We also proposed some variants to the protocol, such as different strategies for the peer selection and the Push-Pull approach for the gossip protocol.
+
+The results of our experiments confirm the power of gossip protocols to solve difficult problems in an efficient way.
+The Push-Pull strategy achieved better performances in all conditions.
+Even though the analytical proof is very complex and out of the scope of this work, we strongly believe the Push-Pull strategy to outperform Push in almost every scenario.
+
+In general, the alternative strategies proposed to select gossip recipients achieve performances comparable to the original one (pure random choice).
+In the case of catastrophes, they are detrimental.
+The randomness of the original strategy helps the protocol to better survive in extreme conditions.
+Although is it probably possible to find out better strategies under very specific hypothesis, we believe it is not worth.
+The random choice resulted to be very simple to implement, resilient and efficient.
+
+The backup multicast algorithm is fundamental to recover from catastrophic scenarios such as the sudden and synchronized crash of \nicefrac{2}{3} of the nodes in the network.
+This may be realistic in very extreme cases, but very unlikely in real world applications.
+Depending on the specific scenario, one can choose to turn on or off the backup protocol.
+
+The Internet has changed a lot from 1998, when the original work was published.
+With the modern infrastructure, network capabilities and computing power, we do not need the level of optimization of resources consumptions needed in 1998.
+This allows us to arbitrary tune the performances wanted from such a protocol depending on our needs.
+In particular, a very simple way to do this is to change the gossip time.
+Lower gossip times will produce a higher load on the infrastructure, but will achieve very fast failure detections.
+Since the average failure detection time scales as \nobreak{$O(n\nobreak\hspace{.08em}\cdot\nobreak\hspace{.08em}log(n))$} with respect to the number of nodes, we can achieve very good results with a moderate consumption of network resources.
+
