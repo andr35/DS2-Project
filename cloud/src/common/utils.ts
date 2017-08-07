@@ -4,15 +4,15 @@ import *  as chalk from "chalk";
 
 export const ProjectUtils = {
   EC2_LOG_PATH: '/home/ubuntu/log.out',
-  PROJECT_PATH: __dirname + '/../../../',
-  BUILD_PATH: __dirname + '/../../../build/libs',
+  PROJECT_PATH: __dirname + '/../../../protocol/',
+  BUILD_PATH: __dirname + '/../../../protocol/build/libs',
   JAR_NAME: 'ds2.jar',
 
   buildProject: (): Promise<string> => {
     return new Promise<string>((resolve, reject) => {
       console.log(chalk.blue('> Compiling project...'));
 
-      const gradlew = spawn('./gradlew', ['node'], {
+      const gradlew = spawn(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', ['node'], {
         // stdio: 'inherit',
         cwd: ProjectUtils.PROJECT_PATH
       });
