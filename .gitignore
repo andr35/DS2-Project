@@ -1,9 +1,9 @@
 ### Intellij+iml ###
 protocol/.idea/*
 cloud/.idea
-!.idea/runConfigurations/
-out/
-classes/
+!protocol/.idea/runConfigurations/
+protocol/out/
+protocol/classes/
 
 ### Java ###
 *.class
@@ -11,8 +11,8 @@ classes/
 hs_err_pid*
 
 ### Gradle ###
-.gradle
-/build/
+protocol/.gradle
+protocol/build/
 !gradle-wrapper.jar
 
 ### Node ###
