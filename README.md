@@ -5,54 +5,72 @@ This project implements a Gossip-style Failure Detection Service. It takes inspi
 
 Authors: [Andrea Zorzi](https://github.com/Andr35) & [Davide Pedranz](https://github.com/davidepedranz) & [Davide Vecchia](https://github.com/davide-vecchia).
 
-## Dependencies
+## Folder Structure
+
+The project is organized in 4 folders:
+
+- Failure Detector
+- Cloud
+- Analysis
+- Report
+- Results
+
+## Failure Detector
+
+### Dependencies
+
 The software is written in Java and uses the [Akka](http://akka.io/) framework.
 We use [Gradle](https://gradle.org/) to build, test and run the project.
 To build and run the project, you need only a working Java 8 JDK installed on the systems.
 For the first build, the needed dependecies are downloaded from the Internet, so make 
 sure to have a working Internet connection.
 
-## Build
-// TODO complete
+### Build
 
-Run the following command from the project root:
+Run the following command from the `protocol` folder:
 
 ```bash
 ./gradlew node
 ```
 This command will generate a JAR archive `build/libs/node.jar` with all the dependencies needed to run the project.
 
-## Run
-// TODO describe
+### Run
 
-You need to provide the following environment variables:
+For each node instance of the system, you need to provide the following environment variables:
 
 | Variable | Scope                                    | Notes        |
 | -------- | ---------------------------------------- | ------------ |
 | HOST     | The hostname of the machine where Node or Client is executed. |              |
 | PORT     | The port of the Node or the Client.      |              |
-| ID  | A unique ID for the new node that will join the system. | `Node` only. |
+| ID       | A unique ID for the new node that will join the system. | `Node` only. |
 
-To run the `Node`, run
+To run the `Tracker`, run
+
 ```bash
-java -jar build/libs/node.jar [COMMAND]
+java -jar build/libs/ds2.jar tracker
 ```
 
+To run the `Node`, run
 
+```bash
+java -jar build/libs/ds2.jar node <host> <port>
+```
 
-## Script
+where `host` and `port` are respectively the ip and port of the tracker instance.
+
+## Cloud
 
 The project is provided with a node script to automate the deployment / start / stop steps.
 
-The script can be used to automate the spawn of multiple Akka nodes in local or to deploy
-and run the project on Amazon's AWS EC2 machines.
+The script can be used to automate the spawn of multiple Akka nodes in local environment or to deploy
+and run the project on Amazon's AWS Cloud EC2 machines.
 
 ### Build
 
 Before use the script, it must be built using the following commands:
 
 ```bash
-$ cd ./script
+$ cd ./cloud
 $ npm install
 $ npm run build
 ```
@@ -67,12 +85,14 @@ It is possible to use the following methods to run the script (from the *script*
 These are the commands that the script provide:
 
 #### Start
-Start a new experiment on AWS.
+
+Start a new experiment on AWS Cloud or in local environment (using `--local` option).
 
 Mandatory options:
 - *--keys* Path of a json file containing AWS's secret and access key (`{"secretKey": "...", "accessKey": "..."}`)
 - *--ssh-key* Path of ssh key that can be used to access the EC2 instances
 - *--ssh-passphare* (optional) Ssh key passphare
+- *--local* (optional) Run the project in local
 
 Optional experiment options:
 
@@ -84,7 +104,7 @@ $ node dist/index.js start experimentName --keys ./aws.config.json --ssh-key ./a
 
 #### Shutdown
 
-Stop and terminate **all** EC2 instances on AWS.
+Stop and terminate **all** EC2 instances on AWS Cloud.
 
 ```bash
 $ node dist/index.js shutdown [experimentName] --keys "./aws.config.json"
@@ -110,39 +130,7 @@ Options:
 node dist/index.js report  experimentName  --keys ./aws.config.json --ssh-key ./awsSsh --ssh-passphrase password --download-dir /home/notebook/reports
 ```
 
-### Example
-The following example shows how to run the some nodes and make some queries.
-Please note that some operating system or shell could use a slightly different syntax for environment variables.
-
-// TODO: write some examples
-
-```bash
-# bootstrap the system
-HOST=127.0.0.1 PORT=20010 NODE_ID=10 java -jar build/libs/node.jar bootstrap
-
-# add a new node
-HOST=127.0.0.1 PORT=20020 NODE_ID=20 java -jar build/libs/node.jar join 127.0.0.1 20010
-```
-
-### Assertions
-The software contains assertions, in order to ensure a correct execution and catch bugs early.
-By default, Java disables all assertions. You can decide to enable them with the `-ea`  option for the JVM:
-```bash
-java -ea -jar build/libs/node.jar [COMMAND]
-```
-
-## Test
-// TODO remove?
-We wrote some [JUnit](http://junit.org) test cases.
-You can run the test from the command line using Gradle:
-
-```bash
-./gradlew check
-```
-The command compiles the project and run all test cases. The result is shown in the standard output.
-Please note that many test cases will spawn many times multiple Akka actors on your machine,
-so the test suite can take some minutes to run.
-
 ## License
-The source code is licences under the MIT license.
+
+The source code is licensed under the MIT license.
 A copy of the license is available in the [LICENSE](LICENSE) file.
